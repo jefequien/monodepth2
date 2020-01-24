@@ -38,7 +38,7 @@ def make_data_loader(cfg, is_train):
         data_ids = cfg.INPUT.FRAME_IDS + cfg.INPUT.CAM_IDS
     else:
         dataset_names = cfg.DATASETS.TEST
-        images_per_batch = cfg.TEST.IMS_PER_BATCH
+        images_per_batch = cfg.SOLVER.IMS_PER_BATCH
         shuffle = False
         data_ids = cfg.INPUT.FRAME_IDS + cfg.INPUT.CAM_IDS
 

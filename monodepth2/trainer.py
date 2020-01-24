@@ -107,7 +107,7 @@ class Trainer:
         """
         self.set_eval()
 
-        for inputs in enumerate(tqdm(self.val_loader)):
+        for _, inputs in enumerate(tqdm(self.val_loader)):
             outputs, losses = self.process_batch(inputs)
 
             self.log_losses(losses, is_train=False)
