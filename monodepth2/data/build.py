@@ -33,14 +33,12 @@ def build_dataset(dataset_names, data_ids, transform):
 def make_data_loader(cfg, is_train):
     if is_train:
         dataset_names = cfg.DATASETS.TRAIN
-        images_per_batch = cfg.SOLVER.IMS_PER_BATCH
         shuffle = True
-        data_ids = cfg.INPUT.FRAME_IDS + cfg.INPUT.CAM_IDS
     else:
         dataset_names = cfg.DATASETS.TEST
-        images_per_batch = cfg.SOLVER.IMS_PER_BATCH
         shuffle = False
-        data_ids = cfg.INPUT.FRAME_IDS + cfg.INPUT.CAM_IDS
+    data_ids = cfg.INPUT.FRAME_IDS + cfg.INPUT.CAM_IDS
+    images_per_batch = cfg.SOLVER.IMS_PER_BATCH
 
     transform = build_transforms(cfg, is_train=is_train)
     dataset = build_dataset(dataset_names, data_ids, transform)
