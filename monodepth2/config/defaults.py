@@ -46,7 +46,7 @@ _C.DATASETS.TEST = ()
 # -----------------------------------------------------------------------------
 _C.DATALOADER = CN()
 # Number of data loading threads
-_C.DATALOADER.NUM_WORKERS = 32
+_C.DATALOADER.NUM_WORKERS = 16
 
 
 # ---------------------------------------------------------------------------- #

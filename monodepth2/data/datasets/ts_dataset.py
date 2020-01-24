@@ -4,16 +4,20 @@ import datetime
 from PIL import Image
 from io import BytesIO
 
+from dataset_store import Dataset
+
 from .synced_dataset import SyncedDataset
 
 class TSDataset(SyncedDataset):
     
     def __init__(self, bag_name, begin, end, data_ids=None, transform=None):
-        super(TSDataset, self).__init__(transform=transform)
+        super(TSDataset, self).__init__(data_ids=data_ids, transform=transform)
         self.bag_name = bag_name
-        self.begin = begin
-        self.end = end
+        self.begin = parse_time(begin)
+        self.end = parse_time(end)
         self.sample_freq = 10
+
+        self.ds = Dataset.open(self.bag_name, ver=None)
 
         self.topics = {
             'main': '/camera1/image_color/compressed',

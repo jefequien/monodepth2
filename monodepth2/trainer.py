@@ -9,9 +9,9 @@ import torch
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 
-from monodepth2.networks.layers import *
 from monodepth2.data import make_data_loader
 from monodepth2.networks import build_models
+from monodepth2.networks.layers import *
 
 from monodepth2.utils import normalize_image
 
@@ -100,7 +100,7 @@ class Trainer:
             self.model_optimizer.step()
 
             self.step += 1
-            self.log(inputs, outputs, losses, is_train=True)
+            self.log_losses(losses, is_train=True)
 
     def valid(self):
         """Validate the model on a single minibatch
@@ -110,7 +110,8 @@ class Trainer:
         for inputs in enumerate(tqdm(self.val_loader)):
             outputs, losses = self.process_batch(inputs)
 
-            self.log(inputs, outputs, losses, is_train=False)
+            self.log_losses(losses, is_train=False)
+            self.log_images(inputs, outputs, is_train=False)
     
     def process_batch(self, inputs):
         inputs = {k:v.to(self.device) for k,v in inputs.items()}
@@ -255,13 +256,17 @@ class Trainer:
 
         return reprojection_loss
     
-    def log(self, inputs, outputs, losses, is_train=True):
+    def log_losses(self, losses, is_train=True):
         """Write an event to the tensorboard events file
         """
         mode = "train" if is_train else "valid"
         writer = self.writers[mode]
         for l, v in losses.items():
             writer.add_scalar("{}".format(l), v, self.step)
+    
+    def log_images(self, inputs, outputs, is_train=True):
+        mode = "train" if is_train else "valid"
+        writer = self.writers[mode]
 
         for j in range(min(4, self.batch_size)):  # write a maxmimum of four images
             for s in self.scales:

@@ -44,7 +44,6 @@ def make_data_loader(cfg, is_train):
 
     transform = build_transforms(cfg, is_train=is_train)
     dataset = build_dataset(dataset_names, data_ids, transform)
-    print(cfg.DATALOADER.NUM_WORKERS)
     data_loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=images_per_batch,
