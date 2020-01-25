@@ -1,9 +1,13 @@
 import os
 import logging
+import PIL.Image as pil
+import matplotlib as mpl
+import matplotlib.cm as cm
 
 import torch
 from torchvision import transforms
 
+from monodepth2.config import cfg
 from monodepth2.networks import build_models
 from monodepth2.networks.layers import *
 from monodepth2.data.transforms import build_transforms
@@ -12,13 +16,17 @@ from monodepth2.utils import normalize_image
 
 logger = logging.getLogger('localization_model')
 
+
 class LocalizationModel:
 
-    def __init__(self, cfg):
-        self.device = cfg.MODEL.DEVICE
+    def __init__(self, config_file):
+        cfg.merge_from_file(config_file)
 
+        self.height = cfg.INPUT.HEIGHT
+        self.width = cfg.INPUT.WIDTH
         self.frame_ids = cfg.INPUT.FRAME_IDS
 
+        self.device = cfg.MODEL.DEVICE
         self.transform = build_transforms(cfg, is_train=False)
 
         # Models
@@ -26,24 +34,51 @@ class LocalizationModel:
         self.to(self.device)
         self.set_eval()
 
-    def step(self, data):
+        # Localization params
+        self.tsmap = None
+        self.initialized = False
+    
+    def setup(self, tsmap, bag_name):
+        self.tsmap = tsmap
+    
+    def initialize(self, obs):
+        self.initialized = True
+
+    def step(self, obs):
+        data = {}
+        data[0] = obs['cam1']
+        data[1] = obs['cam1']
+        data[-1] = obs['cam1']
+
         inputs = self.transform(data)
-        inputs = {k: v.unsqueeze(0) for k,v in inputs.items()} # Create a batch size of 1
-        inputs = {k:v.to(self.device) for k,v in inputs.items()}
+        outputs = self.predict(inputs)
+    
+        # Get largest scale
+        disp = outputs[("disp", 0)]
+        scaled_disp, _ = disp_to_depth(disp, 0.1, 100)
+        disp = scaled_disp.squeeze().cpu().numpy()
+        depth_img = self.vis_depth(disp)
+        depth_img.show()
+        raise
 
-        depth_features = self.models["depth_encoder"](inputs["color_aug", 0, 0])
-        depth_outputs = self.models["depth_decoder"](depth_features)
+        # for k in pose_outputs:
+        #     pose_output = pose_outputs[k][0].to('cpu')
+        #     print(k, pose_output)
+        return None
+    
+    def predict(self, inputs):
+        outputs = {}
+        with torch.no_grad():
+            inputs = {k: v.unsqueeze(0) for k,v in inputs.items()} 
+            inputs = {k: v.to(self.device) for k,v in inputs.items()}
+            depth_features = self.models["depth_encoder"](inputs["color_aug", 0, 0])
+            depth_outputs = self.models["depth_decoder"](depth_features)
 
-        for k in depth_outputs:
-            depth_output = depth_outputs[k][0].to('cpu')
-            depth_output = normalize_image(depth_output)
-            depth_img = transforms.ToPILImage()(depth_output)
-            # depth_img.show()
+            pose_outputs = self.predict_poses(inputs)
 
-        pose_outputs = self.predict_poses(inputs)
-        for k in pose_outputs:
-            pose_output = pose_outputs[k][0].to('cpu')
-            print(k, pose_output)
+            outputs.update(depth_outputs)
+            outputs.update(pose_outputs)
+        return outputs
     
     def predict_poses(self, inputs):
         outputs = {}
@@ -68,6 +103,15 @@ class LocalizationModel:
                     axisangle[:, 0], translation[:, 0], invert=(f_i < 0))
 
         return outputs
+    
+    def vis_depth(self, depth):
+        # Saving colormapped depth image
+        vmax = np.percentile(depth, 95)
+        normalizer = mpl.colors.Normalize(vmin=depth.min(), vmax=vmax)
+        mapper = cm.ScalarMappable(norm=normalizer, cmap='magma')
+        colormapped_im = (mapper.to_rgba(depth)[:, :, :3] * 255).astype(np.uint8)
+        im = pil.fromarray(colormapped_im)
+        return im
 
 
     def set_eval(self):

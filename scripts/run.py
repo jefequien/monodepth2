@@ -2,7 +2,7 @@ import argparse
 import os
 
 from monodepth2.config import cfg
-from monodepth2.runner import LocalizationModel
+from monodepth2.localization import LocalizationModel
 from monodepth2.data.datasets import TSDataset
 
 
@@ -18,8 +18,12 @@ def main(args):
     
     
     map_name = 'feature=base&ver=2019121700&base_pt=(32.75707,-111.55757)&end_pt=(32.092537212,-110.7892506)'
+
+
+
     model = LocalizationModel(cfg)
-    model.load_models(args.save_folder)
+    if args.save_folder:
+        model.load_models(args.save_folder)
 
     for _, data in enumerate(dataset):
         model.step(data)
@@ -33,8 +37,7 @@ if __name__ == "__main__":
                         type=str, help='path to a test image or folder of images',
                         default='configs/first.yaml')
     parser.add_argument('--save-folder',
-                        type=str, help='',
-                        required=True)
+                        type=str, help='')
     args = parser.parse_args()
 
     main(args)

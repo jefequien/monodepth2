@@ -108,11 +108,12 @@ class Trainer:
         self.set_eval()
 
         with torch.no_grad():
-            for _, inputs in enumerate(tqdm(self.val_loader)):
+            for idx, inputs in enumerate(tqdm(self.val_loader)):
                 outputs, losses = self.process_batch(inputs)
 
                 self.log_losses(losses, is_train=False)
-                self.log_images(inputs, outputs, is_train=False)
+                if idx % 10 == 0:
+                    self.log_images(inputs, outputs, is_train=False)
 
                 del inputs, outputs, losses
     
