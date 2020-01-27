@@ -37,7 +37,8 @@ class Trainer:
         self.step = 0
 
         self.output_dir = cfg.OUTPUT_DIR
-        self.log_frequency = cfg.SOLVER.LOG_FREQ
+        self.log_freq = cfg.SOLVER.LOG_FREQ
+        self.val_freq = cfg.SOLVER.VAL_FREQ
         # Tensorboard writers
         now = datetime.datetime.now()
         self.writers = {}
@@ -101,11 +102,12 @@ class Trainer:
             self.model_optimizer.step()
 
             self.step += 1
-            self.log_losses(losses, is_train=True)
-            if self.step % self.log_frequency == 0:
-                self.log()
+            if self.step % self.log_freq == 0:
+                self.log_losses(losses, is_train=True)
+            if self.step % self.val_freq == 0:
+                self.val()
 
-    def log(self):
+    def val(self):
         """Log progress by validating the model on a single minibatch
         """
         self.set_eval()
@@ -120,7 +122,6 @@ class Trainer:
 
             self.log_losses(losses, is_train=False)
             self.log_images(inputs, outputs, is_train=False)
-
             del inputs, outputs, losses
         
         self.set_train()
