@@ -1,12 +1,9 @@
 MODEL:
   NAME: "first"
-  NUM_LAYERS: 18
 DATASETS:
   TRAIN: ("kitti_train",)
   TEST: ("kitti_val",)
 SOLVER:
-  IMS_PER_BATCH: 16
-  BASE_LR: 0.02
-  NUM_EPOCHS: 10
+  IMS_PER_BATCH: 12
 
 OUTPUT_DIR: "./output/first"

@@ -33,10 +33,11 @@ class Trainer:
         self.height = cfg.INPUT.HEIGHT
         self.width = cfg.INPUT.WIDTH
         self.frame_ids = cfg.INPUT.FRAME_IDS
-        self.epoch = 1
+        self.epoch = 0
         self.step = 0
 
         self.output_dir = cfg.OUTPUT_DIR
+        self.log_frequency = cfg.SOLVER.LOG_FREQ
         # Tensorboard writers
         now = datetime.datetime.now()
         self.writers = {}
@@ -53,11 +54,12 @@ class Trainer:
             self.parameters_to_train += list(m.parameters())
         self.model_optimizer = optim.Adam(self.parameters_to_train, cfg.SOLVER.BASE_LR)
         self.model_lr_scheduler = optim.lr_scheduler.StepLR(
-            self.model_optimizer, cfg.SOLVER.SCHEDULER_STEP_SIZE, 0.1)
+            self.model_optimizer, cfg.SOLVER.SCHEDULER_STEP_SIZE, cfg.SOLVER.SCHEDULER_GAMMA)
 
         # Data
         self.train_loader = make_data_loader(cfg, is_train=True)
         self.val_loader = make_data_loader(cfg, is_train=False)
+        self.val_iter = iter(self.val_loader)
         logger.info("Train dataset size: {}".format(len(self.train_loader.dataset)))
         logger.info("Valid dataset size: {}".format(len(self.val_loader.dataset)))
 
@@ -79,10 +81,9 @@ class Trainer:
     
     def train(self):
         while self.epoch <= self.num_epochs:
-            logger.info("Epoch {}/{}".format(self.epoch, self.num_epochs))
+            logger.info("Epoch {}/{}".format(self.epoch + 1, self.num_epochs))
 
             self.run_epoch()
-            self.valid()
             self.save_model()
             self.epoch += 1
     
@@ -101,21 +102,28 @@ class Trainer:
 
             self.step += 1
             self.log_losses(losses, is_train=True)
+            if self.step % self.log_frequency == 0:
+                self.log()
 
-    def valid(self):
-        """Validate the model on a single minibatch
+    def log(self):
+        """Log progress by validating the model on a single minibatch
         """
         self.set_eval()
+        try:
+            inputs = self.val_iter.next()
+        except StopIteration:
+            self.val_iter = iter(self.val_loader)
+            inputs = self.val_iter.next()
 
         with torch.no_grad():
-            for idx, inputs in enumerate(tqdm(self.val_loader)):
-                outputs, losses = self.process_batch(inputs)
+            outputs, losses = self.process_batch(inputs)
 
-                self.log_losses(losses, is_train=False)
-                if idx % 10 == 0:
-                    self.log_images(inputs, outputs, is_train=False)
+            self.log_losses(losses, is_train=False)
+            self.log_images(inputs, outputs, is_train=False)
 
-                del inputs, outputs, losses
+            del inputs, outputs, losses
+        
+        self.set_train()
     
     def process_batch(self, inputs):
         inputs = {k:v.to(self.device) for k,v in inputs.items()}
@@ -265,6 +273,7 @@ class Trainer:
         """
         mode = "train" if is_train else "valid"
         writer = self.writers[mode]
+
         for l, v in losses.items():
             writer.add_scalar("{}".format(l), v, self.step)
     
@@ -272,24 +281,33 @@ class Trainer:
         mode = "train" if is_train else "valid"
         writer = self.writers[mode]
 
-        for j in range(min(4, self.batch_size)):  # write a maxmimum of four images
+        num_images = min(4, self.batch_size) # write a maxmimum of four images
+        for j in range(num_images): 
             for s in self.scales:
                 for frame_id in self.frame_ids:
                     writer.add_image(
                         "color_{}_{}/{}".format(frame_id, s, j),
-                        inputs[("color", frame_id, s)][j].data, self.step)
+                        inputs[("color", frame_id, s)][j].data,
+                        self.step
+                    )
                     if s == 0 and frame_id != 0:
                         writer.add_image(
                             "color_pred_{}_{}/{}".format(frame_id, s, j),
-                            outputs[("color", frame_id, s)][j].data, self.step)
+                            outputs[("color", frame_id, s)][j].data, 
+                            self.step
+                        )
 
                 writer.add_image(
                     "disp_{}/{}".format(s, j),
-                    normalize_image(outputs[("disp", s)][j]), self.step)
+                    normalize_image(outputs[("disp", s)][j]), 
+                    self.step
+                )
 
                 writer.add_image(
                     "automask_{}/{}".format(s, j),
-                    outputs["identity_selection/{}".format(s)][j][None, ...], self.step)
+                    outputs["identity_selection/{}".format(s)][j][None, ...], 
+                    self.step
+                )
 
     def set_train(self):
         """Convert all models to training mode
@@ -322,9 +340,10 @@ class Trainer:
 
         # Save trainer state
         trainer_state = {
-            'optimizer': self.model_optimizer.state_dict(),
             'epoch': self.epoch, 
             'step': self.step,
+            'optimizer': self.model_optimizer.state_dict(),
+            'scheduler': self.model_lr_scheduler.state_dict,
         }
         save_path = os.path.join(save_folder, "{}.pth".format('trainer'))
         torch.save(trainer_state, save_path)
@@ -361,6 +380,7 @@ class Trainer:
             self.epoch = trainer_state['epoch'] + 1
             self.step = trainer_state['step'] + 1
             self.model_optimizer.load_state_dict(trainer_state['optimizer'])
+            self.model_lr_scheduler.load_state_dict(trainer_state['scheduler'])
         else:
             logger.info("Could not load trainer")
             
