@@ -30,8 +30,7 @@ class MonodepthModel(object):
         # Inference
         with torch.no_grad():
             inputs = {k: v.unsqueeze(0) for k,v in inputs.items()} # Create a batch size of 1
-            inputs = {k:v.to(self.device) for k,v in inputs.items()}
-            outputs = self.process_batch(inputs)
+            inputs, outputs = self.process_batch(inputs)
 
         depth = outputs[('disp', 0)][0,0,:,:]
 
@@ -41,7 +40,7 @@ class MonodepthModel(object):
         return preds
 
     def process_batch(self, inputs):
-
+        inputs = {k:v.to(self.device) for k,v in inputs.items()}
         depth_features = self.models["depth_encoder"](inputs["color_aug", 0, 0])
         depth_outputs = self.models["depth_decoder"](depth_features)
         pose_outputs = self.predict_poses(inputs)
@@ -49,7 +48,7 @@ class MonodepthModel(object):
         outputs = {}
         outputs.update(depth_outputs)
         outputs.update(pose_outputs)
-        return outputs
+        return inputs, outputs
     
     def predict_poses(self, inputs):
         outputs = {}

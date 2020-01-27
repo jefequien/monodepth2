@@ -5,9 +5,8 @@ from monodepth2.config import cfg
 from monodepth2.utils.logger import setup_logger
 from monodepth2.utils.miscellaneous import mkdir, save_config
 
-from monodepth2.model import MonodepthModel
-from monodepth2.data.datasets import TSDataset
-from monodepth2.utils.visualize import vis_depth
+from localization import LocalizationModel
+from bag_player import CameraBagPlayer
 
 def setup(args):
     cfg.merge_from_file(args.config_file)
@@ -33,18 +32,14 @@ def main(args):
     map_name = 'feature=base&ver=2019121700&base_pt=(32.75707,-111.55757)&end_pt=(32.092537212,-110.7892506)'
     begin = '0:36:00'
     end = '0:36:10'
-    data_ids = [0,-1]
-    dataset = TSDataset(bag_name, begin, end, data_ids)
+    bag_info = bag_name, map_name, begin, end
+    bag_player = CameraBagPlayer(bag_info)
 
-    model = MonodepthModel(cfg)
-    model.load_model()
-    model.set_eval()
+    localization_model = LocalizationModel(cfg)
 
-    for _, data in enumerate(dataset):
-        pred = model.predict(data)
+    for _, obs in enumerate(bag_player):
+        pred = localization_model.step(obs)
 
-        depth_img = vis_depth(pred['depth'])
-        depth_img.show()
         break
 
 

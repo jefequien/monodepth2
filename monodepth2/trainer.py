@@ -92,8 +92,7 @@ class Trainer(object):
         self.model.set_train()
 
         for _, inputs in enumerate(tqdm(self.train_loader)):
-            inputs = {k:v.to(self.device) for k,v in inputs.items()}
-            outputs = self.model.process_batch(inputs)
+            inputs, outputs = self.model.process_batch(inputs)
             losses = self.compute_losses(inputs, outputs)
 
             self.model_optimizer.zero_grad()
@@ -117,7 +116,7 @@ class Trainer(object):
             inputs = self.val_iter.next()
 
         with torch.no_grad():
-            outputs = self.model.process_batch(inputs)
+            inputs, outputs = self.model.process_batch(inputs)
             losses = self.compute_losses(inputs, outputs)
 
             self.log_losses(losses, is_train=False)

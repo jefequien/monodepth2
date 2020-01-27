@@ -12,7 +12,6 @@ class DataTransform(object):
 
         self.height = cfg.INPUT.HEIGHT
         self.width = cfg.INPUT.WIDTH
-        self.frame_ids = cfg.INPUT.FRAME_IDS
         self.scales = cfg.MODEL.SCALES
 
         self.brightness = (0.8, 1.2)
@@ -40,8 +39,8 @@ class DataTransform(object):
         do_flip = self.is_train and random.random() > 0.5
 
         # Raw images
-        for i in self.frame_ids:
-            inputs[("color", i, -1)] = data[i]
+        for k,v in data.items():
+            inputs[("color", k, -1)] = v
 
         # Intrinsics
         for scale in self.scales:
@@ -64,9 +63,9 @@ class DataTransform(object):
         self.preprocess(inputs, color_aug)
 
         # Remove raw images
-        for i in self.frame_ids:
-            del inputs[("color", i, -1)]
-            del inputs[("color_aug", i, -1)]
+        for k,v in data.items():
+            del inputs[("color", k, -1)]
+            del inputs[("color_aug", k, -1)]
 
         return inputs
 
