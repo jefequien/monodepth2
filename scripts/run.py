@@ -2,31 +2,49 @@ import argparse
 import os
 
 from monodepth2.config import cfg
-from monodepth2.localization import LocalizationModel
+from monodepth2.utils.logger import setup_logger
+from monodepth2.utils.miscellaneous import mkdir, save_config
+
+from monodepth2.model import MonodepthModel
 from monodepth2.data.datasets import TSDataset
+from monodepth2.utils.visualize import vis_depth
+
+def setup(args):
+    cfg.merge_from_file(args.config_file)
+
+    output_dir = cfg.OUTPUT_DIR
+    if output_dir:
+        mkdir(output_dir)
+
+    logger = setup_logger("monodepth2", output_dir)
+    logger.info("Running with config:\n{}".format(cfg))
+
+    # Save overloaded model config in the output directory
+    output_config_path = os.path.join(cfg.OUTPUT_DIR, 'config.yml')
+    logger.info("Saving config into: {}".format(output_config_path))
+    save_config(cfg, output_config_path)
+    return cfg
 
 
 def main(args):
-    cfg.merge_from_file(args.config_file)
+    cfg = setup(args)
 
     bag_name = '2019-12-17-13-24-03'
+    map_name = 'feature=base&ver=2019121700&base_pt=(32.75707,-111.55757)&end_pt=(32.092537212,-110.7892506)'
     begin = '0:36:00'
     end = '0:36:10'
-    data_ids = [0,-1,1]
+    data_ids = [0,-1]
     dataset = TSDataset(bag_name, begin, end, data_ids)
 
-    
-    
-    map_name = 'feature=base&ver=2019121700&base_pt=(32.75707,-111.55757)&end_pt=(32.092537212,-110.7892506)'
-
-
-
-    model = LocalizationModel(cfg)
-    if args.save_folder:
-        model.load_models(args.save_folder)
+    model = MonodepthModel(cfg)
+    model.load_model()
+    model.set_eval()
 
     for _, data in enumerate(dataset):
-        model.step(data)
+        pred = model.predict(data)
+
+        depth_img = vis_depth(pred['depth'])
+        depth_img.show()
         break
 
 
@@ -36,8 +54,6 @@ if __name__ == "__main__":
     parser.add_argument('--config-file',
                         type=str, help='path to a test image or folder of images',
                         default='configs/first.yaml')
-    parser.add_argument('--save-folder',
-                        type=str, help='')
     args = parser.parse_args()
 
     main(args)

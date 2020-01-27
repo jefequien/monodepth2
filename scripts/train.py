@@ -6,11 +6,10 @@ import os
 from monodepth2.config import cfg
 from monodepth2.utils.logger import setup_logger
 from monodepth2.utils.miscellaneous import mkdir, save_config
+
 from monodepth2.trainer import Trainer
 
-
-
-def main(args):
+def setup(args):
     cfg.merge_from_file(args.config_file)
 
     output_dir = cfg.OUTPUT_DIR
@@ -24,7 +23,11 @@ def main(args):
     output_config_path = os.path.join(cfg.OUTPUT_DIR, 'config.yml')
     logger.info("Saving config into: {}".format(output_config_path))
     save_config(cfg, output_config_path)
+    return cfg
 
+
+def main(args):
+    cfg = setup(args)
     trainer = Trainer(cfg)
     if args.resume:
         trainer.load_model()

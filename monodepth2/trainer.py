@@ -9,20 +9,23 @@ import torch
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 
+from monodepth2.model import MonodepthModel
 from monodepth2.data import make_data_loader
-from monodepth2.networks import build_models
 from monodepth2.networks.layers import *
 
 from monodepth2.utils import normalize_image
 
-
 logger = logging.getLogger('monodepth2.trainer')
 
-class Trainer:
+class Trainer(object):
 
     def __init__(self, cfg):
         self.device = cfg.MODEL.DEVICE
         self.scales = cfg.MODEL.SCALES
+
+        self.height = cfg.INPUT.HEIGHT
+        self.width = cfg.INPUT.WIDTH
+        self.frame_ids = cfg.INPUT.FRAME_IDS
 
         self.num_epochs = cfg.SOLVER.NUM_EPOCHS
         self.batch_size = cfg.SOLVER.IMS_PER_BATCH
@@ -30,9 +33,6 @@ class Trainer:
         self.min_depth = cfg.SOLVER.MIN_DEPTH
         self.max_depth = cfg.SOLVER.MAX_DEPTH
 
-        self.height = cfg.INPUT.HEIGHT
-        self.width = cfg.INPUT.WIDTH
-        self.frame_ids = cfg.INPUT.FRAME_IDS
         self.epoch = 0
         self.step = 0
 
@@ -45,15 +45,12 @@ class Trainer:
         for mode in ["train", "valid"]:
             self.writers[mode] = SummaryWriter(os.path.join(self.output_dir, "{} {}".format(mode, now)))
 
-        # Models
-        self.models = build_models(cfg)
-        self.to(self.device)
+        # Model
+        self.model = MonodepthModel(cfg)
+        self.model.to(self.device)
 
         # Optimizer
-        self.parameters_to_train = []
-        for m in self.models.values():
-            self.parameters_to_train += list(m.parameters())
-        self.model_optimizer = optim.Adam(self.parameters_to_train, cfg.SOLVER.BASE_LR)
+        self.model_optimizer = optim.Adam(self.model.parameters_to_train(), cfg.SOLVER.BASE_LR)
         self.model_lr_scheduler = optim.lr_scheduler.StepLR(
             self.model_optimizer, cfg.SOLVER.SCHEDULER_STEP_SIZE, cfg.SOLVER.SCHEDULER_GAMMA)
 
@@ -81,21 +78,23 @@ class Trainer:
             self.project_3d[scale].to(self.device)
     
     def train(self):
-        while self.epoch <= self.num_epochs:
+        while self.epoch < self.num_epochs:
             logger.info("Epoch {}/{}".format(self.epoch + 1, self.num_epochs))
 
             self.run_epoch()
-            self.save_model()
             self.epoch += 1
+            self.model_lr_scheduler.step()
+            self.checkpoint()
     
     def run_epoch(self):
         """Run a single epoch of training and validation
         """
-        self.model_lr_scheduler.step()
-        self.set_train()
+        self.model.set_train()
 
         for _, inputs in enumerate(tqdm(self.train_loader)):
-            outputs, losses = self.process_batch(inputs)
+            inputs = {k:v.to(self.device) for k,v in inputs.items()}
+            outputs = self.model.process_batch(inputs)
+            losses = self.compute_losses(inputs, outputs)
 
             self.model_optimizer.zero_grad()
             losses["loss"].backward()
@@ -105,12 +104,12 @@ class Trainer:
             if self.step % self.log_freq == 0:
                 self.log_losses(losses, is_train=True)
             if self.step % self.val_freq == 0:
-                self.val()
+                self.validate()
 
-    def val(self):
-        """Log progress by validating the model on a single minibatch
+    def validate(self):
+        """Validating the model on a single minibatch and log progress
         """
-        self.set_eval()
+        self.model.set_eval()
         try:
             inputs = self.val_iter.next()
         except StopIteration:
@@ -118,58 +117,23 @@ class Trainer:
             inputs = self.val_iter.next()
 
         with torch.no_grad():
-            outputs, losses = self.process_batch(inputs)
+            outputs = self.model.process_batch(inputs)
+            losses = self.compute_losses(inputs, outputs)
 
             self.log_losses(losses, is_train=False)
             self.log_images(inputs, outputs, is_train=False)
             del inputs, outputs, losses
         
-        self.set_train()
-    
-    def process_batch(self, inputs):
-        inputs = {k:v.to(self.device) for k,v in inputs.items()}
-
-        depth_features = self.models["depth_encoder"](inputs["color_aug", 0, 0])
-        depth_outputs = self.models["depth_decoder"](depth_features)
-        pose_outputs = self.predict_poses(inputs)
-
-        outputs = {}
-        outputs.update(depth_outputs)
-        outputs.update(pose_outputs)
-        
-        self.generate_images_pred(inputs, outputs)
-        losses = self.compute_losses(inputs, outputs)
-        return outputs, losses
-    
-    def predict_poses(self, inputs):
-        outputs = {}
-
-        pose_feats = {f_i: inputs["color_aug", f_i, 0] for f_i in self.frame_ids}
-        for f_i in self.frame_ids[1:]:
-            if f_i != "s":
-                # To maintain ordering we always pass frames in temporal order
-                if f_i < 0:
-                    pose_inputs = [pose_feats[f_i], pose_feats[0]]
-                else:
-                    pose_inputs = [pose_feats[0], pose_feats[f_i]]
-
-                pose_inputs = [self.models["pose_encoder"](torch.cat(pose_inputs, 1))]
-
-                axisangle, translation = self.models["pose_decoder"](pose_inputs)
-                outputs[("axisangle", 0, f_i)] = axisangle
-                outputs[("translation", 0, f_i)] = translation
-
-                # Invert the matrix if the frame id is negative
-                outputs[("cam_T_cam", 0, f_i)] = transformation_from_parameters(
-                    axisangle[:, 0], translation[:, 0], invert=(f_i < 0))
-
-        return outputs
+        self.model.set_train()
     
     def compute_losses(self, inputs, outputs):
         """Compute the reprojection and smoothness losses for a minibatch
         """
         losses = {}
         total_loss = 0
+
+        # Create warped images
+        self.generate_images_pred(inputs, outputs)
 
         for scale in self.scales:
             loss = 0
@@ -309,77 +273,49 @@ class Trainer:
                     outputs["identity_selection/{}".format(s)][j][None, ...], 
                     self.step
                 )
-
-    def set_train(self):
-        """Convert all models to training mode
-        """
-        for m in self.models.values():
-            m.train()
-
-    def set_eval(self):
-        """Convert all models to testing/evaluation mode
-        """
-        for m in self.models.values():
-            m.eval()
-
-    def to(self, device):
-        for m in self.models.values():
-            m.to(device)
     
-    def save_model(self):
+    def checkpoint(self):
         """Save model weights to disk
         """
         save_folder = os.path.join(self.output_dir, "models", "weights_{}".format(self.epoch))
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)
         logger.info("Saving to {}".format(save_folder))
-
-        for model_name, model in self.models.items():
-            save_path = os.path.join(save_folder, "{}.pth".format(model_name))
-            to_save = model.state_dict()
-            torch.save(to_save, save_path)
+        
+        self.model.save_model(save_folder)
 
         # Save trainer state
         trainer_state = {
-            'epoch': self.epoch, 
+            'epoch': self.epoch,
             'step': self.step,
             'optimizer': self.model_optimizer.state_dict(),
-            'scheduler': self.model_lr_scheduler.state_dict,
+            'scheduler': self.model_lr_scheduler.state_dict(),
         }
         save_path = os.path.join(save_folder, "{}.pth".format('trainer'))
         torch.save(trainer_state, save_path)
 
-        # Symlink latest model
+        # Symlink latest model for resuming
         latest_model_path = os.path.join(self.output_dir, "models", "latest_weights")
         if os.path.islink(latest_model_path):
             os.unlink(latest_model_path)
         os.symlink(os.path.basename(save_folder), latest_model_path)
     
-    def load_model(self):
+    def load_checkpoint(self):
         """Load model(s) from disk
         """
         save_folder = os.path.join(self.output_dir, "models", "latest_weights")
         assert os.path.isdir(save_folder), "Cannot find folder {}".format(save_folder)
 
         logger.info("Loading from {}".format(save_folder))
-        for model_name, model in self.models.items():
-            logger.info("Loading {} weights...".format(model_name))
-            save_path = os.path.join(save_folder, "{}.pth".format(model_name))
-            pretrained_dict = torch.load(save_path)
-
-            # Filter layers
-            model_dict = model.state_dict()
-            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
-            model_dict.update(pretrained_dict)
-            model.load_state_dict(model_dict)
+        self.model.load_model(save_folder)
 
         # Load trainer state
         save_path = os.path.join(save_folder, "{}.pth".format("trainer"))
         if os.path.isfile(save_path):
             logger.info("Loading trainer...")
             trainer_state = torch.load(save_path)
-            self.epoch = trainer_state['epoch'] + 1
-            self.step = trainer_state['step'] + 1
+            self.epoch = trainer_state['epoch']
+            self.step = trainer_state['step']
             self.model_optimizer.load_state_dict(trainer_state['optimizer'])
             self.model_lr_scheduler.load_state_dict(trainer_state['scheduler'])
         else:
