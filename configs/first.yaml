@@ -4,6 +4,6 @@ DATASETS:
   TRAIN: ("kitti_train",)
   TEST: ("kitti_val",)
 SOLVER:
-  IMS_PER_BATCH: 4
+  IMS_PER_BATCH: 12
 
 OUTPUT_DIR: "./output/first"
