@@ -19,76 +19,76 @@ class DataTransform(object):
         self.saturation = (0.8, 1.2)
         self.hue = (-0.1, 0.1)
 
-        self.K = np.array([[0.58, 0, 0.5, 0],
-                           [0, 1.92, 0.5, 0],
-                           [0, 0, 1, 0],
-                           [0, 0, 0, 1]], dtype=np.float32)
-
-        self.interp = Image.ANTIALIAS
+        # Transforms
         self.to_tensor = transforms.ToTensor()
         self.resize = {}
-        for i in self.scales:
-            s = 2 ** i
-            self.resize[i] = transforms.Resize((self.height // s, self.width // s),
-                                               interpolation=self.interp)
+        for s in self.scales:
+            r = 2 ** s
+            self.resize[s] = transforms.Resize((self.height // r, self.width // r),
+                                               interpolation=Image.ANTIALIAS)
 
     def __call__(self, data):
+        """Returns a single training item from data.
+
+        Values correspond to torch tensors.
+        Keys in the dictionary are either strings or tuples:
+
+            ("color",     <frame_id>, <scale>)      for raw colour images,
+            ("color_aug", <frame_id>, <scale>)      for augmented colour images,
+            ("K",         <frame_id>, <scale>)      for camera intrinsics,
+            ("inv_K",     <frame_id>, <scale>)      for camera intrinsics inverted,
+            ("ext_T"      <frame_id>, <scale>)      for camera extrinsics,
+
+        <frame_id> is either:
+            an integer (e.g. 0, -1, or 1) representing the temporal step relative to 'index',
+        or
+            "s" for the opposite image in the stereo pair.
+
+        <scale> is an integer representing the scale of the image relative to the fullsize image:
+            -1      images at native resolution as loaded from disk
+            0       images resized to (self.width,      self.height     )
+            1       images resized to (self.width // 2, self.height // 2)
+            2       images resized to (self.width // 4, self.height // 4)
+            3       images resized to (self.width // 8, self.height // 8)
+        """
         inputs = {}
+        imgs, intrs, extrs = {}, {}, {}
+        for frame_id, v in data.items():
+            imgs[frame_id] = v[0]
+            intrs[frame_id] = v[1]
+            extrs[frame_id] = v[2]
 
         do_color_aug = self.is_train and random.random() > 0.5
         do_flip = self.is_train and random.random() > 0.5
-
-        # Raw images
-        for k,v in data.items():
-            inputs[("color", k, -1)] = v
-
-        # Intrinsics
-        for scale in self.scales:
-            K = self.K.copy()
-
-            K[0, :] *= self.width // (2 ** scale)
-            K[1, :] *= self.height // (2 ** scale)
-
-            inv_K = np.linalg.pinv(K)
-
-            inputs[("K", scale)] = torch.from_numpy(K)
-            inputs[("inv_K", scale)] = torch.from_numpy(inv_K)
-        
         if do_color_aug:
             color_aug = transforms.ColorJitter.get_params(
                 self.brightness, self.contrast, self.saturation, self.hue)
         else:
             color_aug = (lambda x: x)
-        
-        self.preprocess(inputs, color_aug)
 
-        # Remove raw images
-        for k,v in data.items():
-            del inputs[("color", k, -1)]
-            del inputs[("color_aug", k, -1)]
+        # Resize images
+        for f, img in imgs.items():
+            inputs[("color", f, -1)] = img
+            inputs[("color_aug", f, -1)] = color_aug(img)
+            for s in self.scales:
+                inputs[('color', f, s)] = self.resize[s](inputs[('color', f, s-1)])
+                inputs[('color_aug', f, s)] = self.resize[s](inputs[('color_aug', f, s-1)])
+
+            del inputs[("color", f, -1)]
+            del inputs[("color_aug", f, -1)]
+        
+        inputs = {k: self.to_tensor(v) for k,v in inputs.items()}
+
+        # Intrinsics
+        for f, K in intrs.items():
+            for s in self.scales:
+                K_s = K.copy()
+                K_s[0, :] *= self.width // (2 ** s)
+                K_s[1, :] *= self.height // (2 ** s)
+                inputs[("K", f, s)] = torch.from_numpy(K_s)
+                inputs[("inv_K", f, s)] = torch.from_numpy(np.linalg.pinv(K_s))
 
         return inputs
-
-    def preprocess(self, inputs, color_aug):
-        """Resize colour images to the required scales and augment if required
-
-        We create the color_aug object in advance and apply the same augmentation to all
-        images in this item. This ensures that all images input to the pose network receive the
-        same augmentation.
-        """
-        for k in list(inputs):
-            frame = inputs[k]
-            if "color" in k:
-                n, im, i = k
-                for i in self.scales:
-                    inputs[(n, im, i)] = self.resize[i](inputs[(n, im, i - 1)])
-
-        for k in list(inputs):
-            f = inputs[k]
-            if "color" in k:
-                n, im, i = k
-                inputs[(n, im, i)] = self.to_tensor(f)
-                inputs[(n + "_aug", im, i)] = self.to_tensor(color_aug(f))
 
 def build_transforms(cfg, is_train=True):
     transform = DataTransform(cfg, is_train=is_train)

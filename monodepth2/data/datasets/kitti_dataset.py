@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from PIL import Image
 
 from .synced_dataset import SyncedDataset
@@ -15,10 +16,18 @@ class KITTIDataset(SyncedDataset):
             'stereo': '3', # r
         }
 
+        self.K = np.array([[0.58, 0, 0.5, 0],
+                           [0, 1.92, 0.5, 0],
+                           [0, 0, 1, 0],
+                           [0, 0, 0, 1]], dtype=np.float32)
+        self.T = None
+
     def __len__(self):
         return len(self.filenames)
 
     def get_image(self, cam_id, index, shift=0):
+        """Returns image, intrinsic, extrinsic
+        """
         line = self.filenames[index].split()
         folder = line[0]
         frame_index = int(line[1]) + shift
@@ -33,7 +42,7 @@ class KITTIDataset(SyncedDataset):
         )
 
         img = pil_loader(image_path)
-        return img
+        return img, self.K, self.T
 
 def pil_loader(path):
     # open path as file to avoid ResourceWarning

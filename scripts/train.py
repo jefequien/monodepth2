@@ -30,7 +30,7 @@ def main(args):
     cfg = setup(args)
     trainer = Trainer(cfg)
     if args.resume:
-        trainer.load_model()
+        trainer.load_checkpoint()
     trainer.train()
 
 

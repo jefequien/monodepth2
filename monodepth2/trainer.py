@@ -207,9 +207,9 @@ class Trainer(object):
                     T = outputs[("cam_T_cam", 0, frame_id)]
 
                 cam_points = self.backproject_depth[source_scale](
-                    depth, inputs[("inv_K", source_scale)])
+                    depth, inputs[("inv_K", frame_id, source_scale)])
                 pix_coords = self.project_3d[source_scale](
-                    cam_points, inputs[("K", source_scale)], T)
+                    cam_points, inputs[("K", frame_id, source_scale)], T)
 
                 outputs[("sample", frame_id, scale)] = pix_coords
 
