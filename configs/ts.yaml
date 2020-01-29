@@ -1,8 +1,8 @@
 MODEL:
   NAME: "ts"
 INPUT:
-  HEIGHT: 270 #192
-  WIDTH: 480 #640
+  HEIGHT: 288 #192
+  WIDTH: 512 #640
 DATASETS:
   TRAIN: ("ts_train",)
   TEST: ("ts_val",)

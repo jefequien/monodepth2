@@ -5,6 +5,8 @@ from PIL import Image
 import torch
 from torchvision import transforms
 
+from ..maps.map_utils import scale_cam_intrinsic
+
 
 class DataTransform(object):
     def __init__(self, cfg, is_train=True):
@@ -53,6 +55,8 @@ class DataTransform(object):
         """
         frame_ids = {f for f in [0,-1,1] if f in data.keys()}
         imgs = {f: data[f] for f in frame_ids}
+        calibs = {f: data[f, 'calib'] for f in frame_ids}
+
         intrs = {f: data[f, 'calib']['K'] for f in frame_ids}
         extrs = {f: data[f, 'calib']['ext_T'] for f in frame_ids}
 
@@ -80,8 +84,9 @@ class DataTransform(object):
         
         inputs = {k: self.to_tensor(v) for k,v in inputs.items()}
 
-        # Intrinsics
-        for f, K in intrs.items():
+        # Calibrations
+        for f, calib in calibs.items():
+            K = scale_cam_intrinsic(calib['K'], calib['img_shape'], (self.width, self.height))
             for s in self.scales:
                 K_s = K.copy()
                 K_s[0, :] *= self.width // (2 ** s)

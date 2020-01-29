@@ -26,6 +26,8 @@ class Trainer(object):
         self.height = cfg.INPUT.HEIGHT
         self.width = cfg.INPUT.WIDTH
         self.frame_ids = cfg.INPUT.FRAME_IDS
+        assert self.height % 32 == 0, "'height' must be a multiple of 32"
+        assert self.width % 32 == 0, "'width' must be a multiple of 32"
 
         self.num_epochs = cfg.SOLVER.NUM_EPOCHS
         self.batch_size = cfg.SOLVER.IMS_PER_BATCH
