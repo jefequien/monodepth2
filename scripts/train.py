@@ -39,7 +39,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Training")
     parser.add_argument('--config-file',
                         type=str,help='path to a test image or folder of images',
-                        default='configs/first.yaml')
+                        default='configs/ts.yaml')
     parser.add_argument("--resume",
                         help="resume training",
                         action="store_true")

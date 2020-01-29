@@ -1,4 +1,5 @@
 import os
+import time
 import numpy as np
 import cv2 as cv
 from PIL import Image
@@ -26,6 +27,10 @@ class LocalizationModel:
         self.cam_Ts = {}
         self.observation = {}
         self.initialized = False
+
+        self.timers = {}
+        for i in range(5):
+            self.timers[i] = time.time()
     
     def setup(self, bag_info):
         bag_name, map_name, begin, end = bag_info
@@ -51,27 +56,43 @@ class LocalizationModel:
         if not self.initialized:
             self.initialize(observation)
         
-        all_data = self.prepare_data(observation)
-        all_preds = self.model.predict(all_data)
+        self.timers[0] = time.time()
 
-        self.position = observation['gps_data']
-        for cam_name in self.cam_names:
-            self.map_cameras[cam_name].set_position(self.position)
+        all_data = self.prepare_data(observation)
+        self.timers[1] = time.time()
+
+        all_preds = self.model.predict(all_data)
+        
+        self.timers[2] = time.time()
 
         # Update from predictions
         for cam_name, data, cam_T, depth in zip(self.cam_names, all_data, all_preds['cam_T'], all_preds['depth']):
 
-            # self.map_cameras[cam_name].apply_T(cam_T)
+            self.map_cameras[cam_name].apply_T(cam_T)
 
             # Visualize
-            color_img = data[0]
+            size = data[0].size
+            size = (size[0] // 2, size[1] // 2)
+            color_img = data[0].resize(size, Image.ANTIALIAS)
+
             depth_img = vis_depth(depth)
+
             pose_img = self.map_viewer.get_view(self.map_cameras[cam_name])
+            pose_img = pose_img.resize(color_img.size, Image.ANTIALIAS)
+            color_img.paste(pose_img, (0,0), pose_img.convert('L'))
 
             self.vis_images['{} color'.format(cam_name)] = color_img
             self.vis_images['{} depth'.format(cam_name)] = depth_img
-            self.vis_images['{} pose'.format(cam_name)] = pose_img
         self.show()
+        
+        self.timers[3] = time.time()
+        print("Pre:{}, Inf: {}, Vis: {}, Other: {}".format(
+            self.timers[1]-self.timers[0],
+            self.timers[2]-self.timers[1],
+            self.timers[3]-self.timers[2],
+            self.timers[0]-self.timers[4],
+        ))
+        self.timers[4] = time.time()
 
         self.last_observation = observation
         return None

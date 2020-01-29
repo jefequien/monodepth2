@@ -11,19 +11,11 @@ class MapViewer:
         self.map_reader = MapReader(map_name)
 
     def get_view(self, camera):
-
-        landmarks = self.map_reader.get_landmarks(camera.rt[1])
-
         cam2enu, enu2cam = camera.get_transforms()
-        landmarks = enu2cam[:3, :3].dot(landmarks.T).T + enu2cam[:3, 3]
 
-        # imu2emu = get_rotation_translation_mat(*camera.rt)
-        # enu2imu = np.linalg.inv(imu2emu)
-        # cam2imu = camera.extrinsic
-        # imu2cam = np.linalg.inv(cam2imu)
-        # # Apply transforms
-        # landmarks = enu2imu[:3, :3].dot(landmarks.T).T + enu2imu[:3, 3]
-        # landmarks = imu2cam[:3, :3].dot(landmarks.T).T + imu2cam[:3, 3]
+        t = cam2enu[:3, 3]
+        landmarks = self.map_reader.get_landmarks(t)
+        landmarks = enu2cam[:3, :3].dot(landmarks.T).T + enu2cam[:3, 3]
 
         # Filter for landmarks in front of camera (Z > 0)
         landmarks = np.array([l for l in landmarks if l[2] > 0])
@@ -59,39 +51,18 @@ class MapCamera:
         self.img_shape = calib['img_shape']
         self.out_shape = calib['img_shape']
 
-        self.rt = None
-
+        self.T = np.eye(4)
 
     def set_position(self, position):
-        self.rt = position[3:], position[:3]
-
-        imu2emu = get_rotation_translation_mat(*self.rt)
-        enu2imu = np.linalg.inv(imu2emu)
+        r, t = position[3:], position[:3]
+        imu2emu = get_rotation_translation_mat(r, t)
         cam2imu = self.extrinsic
-        imu2cam = np.linalg.inv(cam2imu)
-
-        r0, t0 = get_rt_vecs(imu2cam)
-        r1, t1 = get_rt_vecs(enu2imu)
-
-        # r1, t1 = position[3:], position[:3]
-        self.rt = compose_rt_vecs(r0, t0, r1, t1)
-        # self.rt = r1, t1
+        self.T = imu2emu.dot(cam2imu)
 
     def apply_T(self, cam_T):
-        r0, t0 = get_rt_vecs(cam_T)
-        r1, t1 = self.rt
-        self.rt = compose_rt_vecs(r0, t0, r1, t1)
+        self.T = self.T.dot(cam_T)
     
     def get_transforms(self):
-        cam2enu = get_rotation_translation_mat(*self.rt)
+        cam2enu = self.T
         enu2cam = np.linalg.inv(cam2enu)
         return cam2enu, enu2cam
-
-def get_rt_vecs(mat):
-    r = cv.Rodrigues(mat[:3, :3])[0]
-    t = mat[:3, 3]
-    return r.reshape(3), t.reshape(3)
-
-def compose_rt_vecs(r0, t0, r1, t1):
-    r, t = cv.composeRT(r0, t0, r1, t1)[:2]
-    return r.reshape(3), t.reshape(3)

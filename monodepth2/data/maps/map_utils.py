@@ -9,7 +9,7 @@ def get_rotation_translation_mat(rotation, translation):
     :param translation: in-order offset of x, y, z
     :return: affine transformation matrix
     """
-    rx, ry, rz = rotation.reshape(3)
+    rx, ry, rz = rotation
     rot_mat_rx = np.array([[1, 0, 0, 0],
                            [0, np.cos(rx), -np.sin(rx), 0],
                            [0, np.sin(rx), np.cos(rx), 0],
@@ -24,7 +24,7 @@ def get_rotation_translation_mat(rotation, translation):
                            [0, 0, 0, 1]])
 
     tform = rot_mat_rz.dot(rot_mat_ry).dot(rot_mat_rx)
-    tform[:3, 3] = translation.reshape(3)
+    tform[:3, 3] = translation
     return tform
 
 def scale_cam_intrinsic(intrinsic, src_shape, dst_shape, override=False):
