@@ -44,11 +44,18 @@ class BagReader(object):
     def __iter__(self):
         keys, topic_list = zip(*self.topics.items())
 
-        self.last_idx = -1
+        last_idx = -1
+        n = self.__len__()
         for all_topic_data in self.ds.fetch_aligned(*topic_list, ts_begin=self.begin, ts_end=self.end):
             ts = all_topic_data[0][0]
-            if self.ts_to_idx(ts) == self.last_idx:
+            idx = self.ts_to_idx(ts)
+
+            if idx == last_idx: # Skip
                 continue
+            last_idx = idx
+
+            if idx == n: # Done
+                break
             
             data = {k: t_data for k, t_data in zip(keys, all_topic_data)}
             data = self.postprocess(data)
