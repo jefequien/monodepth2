@@ -1,6 +1,7 @@
 import os
 import pickle
 import numpy as np
+from PIL import Image
 from tqdm import tqdm
 
 from .synced_dataset import SyncedDataset
@@ -28,9 +29,8 @@ class TSDataset(SyncedDataset):
     def get_image(self, cam_name, idx, shift=0):
         """Shift by one."""
         bag_idx = idx + 1 + shift
-        fname = os.path.join(self.load_dir, '{}/{}.pkl'.format(bag_idx, cam_name))
-        with open(fname, 'rb') as f:
-            return pickle.load(f)
+        fname = os.path.join(self.load_dir, '{}/{}.jpg'.format(bag_idx, cam_name))
+        return Image.open(fname)
     
     def get_calibration(self, cam_name):
         cam_id = int(cam_name.replace('cam', ''))
@@ -55,12 +55,18 @@ def load_bag_to_disk(bag_reader, reload=False):
     print('Loading bag to disk... ', bag_reader.bag_info)
     for idx, data in enumerate(tqdm(bag_reader)):
         for k, v in data.items():
-            fname = os.path.join(load_dir, '{}/{}.pkl'.format(idx, k))
-            if os.path.isfile(fname) and not reload:
-                continue
+            if isinstance(v, Image.Image):
+                fname = os.path.join(load_dir, '{}/{}.jpg'.format(idx, k))
+                if not os.path.isdir(os.path.dirname(fname)):
+                    os.makedirs(os.path.dirname(fname))
+                if not os.path.isfile(fname) or reload:
+                    v.save(fname, 'JPEG')
+            
+            else:
+                fname = os.path.join(load_dir, '{}/{}.pkl'.format(idx, k))
+                if not os.path.isdir(os.path.dirname(fname)):
+                    os.makedirs(os.path.dirname(fname))
 
-            if not os.path.isdir(os.path.dirname(fname)):
-                os.makedirs(os.path.dirname(fname))
-            with open(fname, 'wb') as f:
-                pickle.dump(v, f, protocol=pickle.HIGHEST_PROTOCOL)
+                with open(fname, 'wb') as f:
+                    pickle.dump(v, f, protocol=pickle.HIGHEST_PROTOCOL)
     return load_dir
