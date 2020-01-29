@@ -20,48 +20,43 @@ class TSDataset(SyncedDataset):
         self.calib_manager = CalibrationManager(dataset=bag_name)
         self.camera_calibs = self.calib_manager.get_cameras()
 
-        self.K = np.array([[0.58, 0, 0.5, 0],
-                           [0, 1.92, 0.5, 0],
-                           [0, 0, 1, 0],
-                           [0, 0, 0, 1]], dtype=np.float32)
-
     def __len__(self):
-        return self.bag_reader.__len__()
+        """Do not count first and last frames from bag reader.
+        """
+        return self.bag_reader.__len__() - 2
     
     def get_image(self, cam_name, idx, shift=0):
-        fname = os.path.join(self.load_dir, '{}/{}.pkl'.format(idx+shift, cam_name))
+        """Shift by one."""
+        bag_idx = idx + 1 + shift
+        fname = os.path.join(self.load_dir, '{}/{}.pkl'.format(bag_idx, cam_name))
         with open(fname, 'rb') as f:
             return pickle.load(f)
     
     def get_calibration(self, cam_name):
-        cam_id = int(cam_name.split('cam')[1])
+        cam_id = int(cam_name.replace('cam', ''))
         intrinsic = self.camera_calibs[cam_id]['intrinsic']
         extrinsic = self.camera_calibs[cam_id]['extrinsic']['imu-0']
         distortion = self.camera_calibs[cam_id]['distortion'].squeeze()
         img_shape = self.camera_calibs[cam_id]['img_shape']
 
         calib = {}
-        # calib['K'] = np.array(intrinsic, dtype=np.float32)
+        calib['K'] = np.array(intrinsic, dtype=np.float32)
         calib['ext_T'] = np.array(extrinsic, dtype=np.float32)
-        calib['K'] = self.K
         return calib
 
 
 def load_bag_to_disk(bag_reader, reload=False):
     load_dir = "/tmp/tsdatasets/{}".format(str(bag_reader.bag_info))
-    if not reload and os.path.isdir(load_dir):
-        return load_dir
 
     print('Loading bag to disk... ', bag_reader.bag_info)
     for idx, data in enumerate(tqdm(bag_reader)):
         for k, v in data.items():
             fname = os.path.join(load_dir, '{}/{}.pkl'.format(idx, k))
+            if os.path.isfile(fname) and not reload:
+                continue
 
             if not os.path.isdir(os.path.dirname(fname)):
                 os.makedirs(os.path.dirname(fname))
-            
             with open(fname, 'wb') as f:
                 pickle.dump(v, f, protocol=pickle.HIGHEST_PROTOCOL)
     return load_dir
-
-

@@ -1,9 +1,12 @@
 MODEL:
   NAME: "ts"
+INPUT:
+  HEIGHT: 270 #192
+  WIDTH: 480 #640
 DATASETS:
   TRAIN: ("ts_train",)
   TEST: ("ts_val",)
 SOLVER:
-  IMS_PER_BATCH: 12
+  IMS_PER_BATCH: 4
 
 OUTPUT_DIR: "./output/ts"
