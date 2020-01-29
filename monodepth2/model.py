@@ -13,8 +13,6 @@ class MonodepthModel(object):
     def __init__(self, cfg):
         self.device = cfg.MODEL.DEVICE
         self.scales = cfg.MODEL.SCALES
-
-        self.frame_ids = cfg.INPUT.FRAME_IDS
         
         self.output_dir = cfg.OUTPUT_DIR
 
@@ -23,20 +21,29 @@ class MonodepthModel(object):
 
         self.transform = build_transforms(cfg, is_train=False)
     
-    def predict(self, data):
-        inputs = self.transform(data)
+    def predict(self, all_data):
+        """Predict a list of data as a batch.
+        """
+        # Tranform and batch a list of data
+        batch_inputs = {}
+        for data in all_data:
+            inputs = self.transform(data)
+            for k,v in inputs.items():
+                if k not in batch_inputs:
+                    batch_inputs[k] = []
+                batch_inputs[k].append(v)
+        batch_inputs = {k: torch.stack(v) for k,v in batch_inputs.items()}
+        
         outputs = {}
-
-        # Inference
         with torch.no_grad():
-            inputs = {k: v.unsqueeze(0) for k,v in inputs.items()} # Create a batch size of 1
-            inputs, outputs = self.process_batch(inputs)
+            _, outputs = self.process_batch(batch_inputs)
 
-        depth = outputs[('disp', 0)][0,0,:,:]
+        depth = outputs[('disp', 0)][:,0,:,:]
+        cam_T = outputs[('cam_T_cam', 0, -1)]
 
         preds = {}
         preds['depth'] = depth.cpu().detach().numpy()
-        preds['T'] = outputs[("cam_T_cam", 0, -1)][0].cpu().detach().numpy()
+        preds['cam_T'] = cam_T.cpu().detach().numpy()
         return preds
 
     def process_batch(self, inputs):
@@ -51,28 +58,30 @@ class MonodepthModel(object):
         return inputs, outputs
     
     def predict_poses(self, inputs):
-        outputs = {}
+        frame_ids = set([k[1] for k in inputs])
+        
+        pose_inputs = {f_i: inputs["color_aug", f_i, 0] for f_i in frame_ids}
+        pose_outputs = {}
+        for f_i in frame_ids:
+            if f_i == 0:
+                continue
 
-        pose_feats = {f_i: inputs["color_aug", f_i, 0] for f_i in self.frame_ids}
-        for f_i in self.frame_ids[1:]:
-            if f_i != "s":
-                # To maintain ordering we always pass frames in temporal order
-                if f_i < 0:
-                    pose_inputs = [pose_feats[f_i], pose_feats[0]]
-                else:
-                    pose_inputs = [pose_feats[0], pose_feats[f_i]]
+            # To maintain ordering we always pass frames in temporal order
+            if f_i < 0:
+                x = [pose_inputs[f_i], pose_inputs[0]]
+            else:
+                x = [pose_inputs[0], pose_inputs[f_i]]
 
-                pose_inputs = [self.models["pose_encoder"](torch.cat(pose_inputs, 1))]
+            pose_features = [self.models["pose_encoder"](torch.cat(x, 1))]
+            axisangle, translation = self.models["pose_decoder"](pose_features)
+            pose_outputs[("axisangle", 0, f_i)] = axisangle
+            pose_outputs[("translation", 0, f_i)] = translation
 
-                axisangle, translation = self.models["pose_decoder"](pose_inputs)
-                outputs[("axisangle", 0, f_i)] = axisangle
-                outputs[("translation", 0, f_i)] = translation
+            # Invert the matrix if the frame id is negative
+            pose_outputs[("cam_T_cam", 0, f_i)] = transformation_from_parameters(
+                axisangle[:, 0], translation[:, 0], invert=(f_i < 0))
 
-                # Invert the matrix if the frame id is negative
-                outputs[("cam_T_cam", 0, f_i)] = transformation_from_parameters(
-                    axisangle[:, 0], translation[:, 0], invert=(f_i < 0))
-
-        return outputs
+        return pose_outputs
 
     def set_train(self):
         """Convert all models to training mode

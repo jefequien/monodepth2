@@ -51,13 +51,14 @@ class DataTransform(object):
             2       images resized to (self.width // 4, self.height // 4)
             3       images resized to (self.width // 8, self.height // 8)
         """
-        inputs = {}
-        imgs, intrs, extrs = {}, {}, {}
-        for frame_id, v in data.items():
-            imgs[frame_id] = v[0]
-            intrs[frame_id] = v[1]
-            extrs[frame_id] = v[2]
+        frame_ids = {f for f in [0,-1,1] if f in data.keys()}
+        imgs = {f: data[f] for f in frame_ids}
+        intrs = {f: data[f, 'calib']['K'] for f in frame_ids}
+        extrs = {f: data[f, 'calib']['ext_T'] for f in frame_ids}
 
+        inputs = {}
+
+        # Augmentations
         do_color_aug = self.is_train and random.random() > 0.5
         do_flip = self.is_train and random.random() > 0.5
         if do_color_aug:

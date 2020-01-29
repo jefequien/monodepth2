@@ -12,8 +12,8 @@ class KITTIDataset(SyncedDataset):
         self.filenames = readlines(fpath)
         self.img_ext = '.jpg'
         self.cam_map = {
-            'main': '2', # l
-            'stereo': '3', # r
+            'cam1': '2', # l
+            'cam2': '3', # r
         }
 
         self.K = np.array([[0.58, 0, 0.5, 0],
@@ -25,7 +25,7 @@ class KITTIDataset(SyncedDataset):
     def __len__(self):
         return len(self.filenames)
 
-    def get_image(self, cam_id, index, shift=0):
+    def get_image(self, cam_name, index, shift=0):
         """Returns image, intrinsic, extrinsic
         """
         line = self.filenames[index].split()
@@ -37,12 +37,18 @@ class KITTIDataset(SyncedDataset):
         image_path = os.path.join(
             self.root, 
             folder,
-            "image_0{}/data".format(self.cam_map[cam_id]), 
+            "image_0{}/data".format(self.cam_map[cam_name]), 
             f_str
         )
 
         img = pil_loader(image_path)
-        return img, self.K, self.T
+        return img
+    
+    def get_calibration(self, cam_name):
+        calib = {}
+        calib['K'] = self.K.copy()
+        calib['ext_T'] = None
+        return calib
 
 def pil_loader(path):
     # open path as file to avoid ResourceWarning

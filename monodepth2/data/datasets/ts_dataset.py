@@ -1,53 +1,67 @@
-
-import time
-import datetime
-from PIL import Image
-from io import BytesIO
-
-from dataset_store import Dataset
+import os
+import pickle
+import numpy as np
+from tqdm import tqdm
 
 from .synced_dataset import SyncedDataset
+from .bag_reader import CameraBagReader
+from monodepth2.utils.calibration_manager import CalibrationManager
+
 
 class TSDataset(SyncedDataset):
-    
-    def __init__(self, bag_name, begin, end, data_ids=None, transform=None):
+
+    def __init__(self, bag_info, data_ids, transform=None):
         super(TSDataset, self).__init__(data_ids=data_ids, transform=transform)
-        self.bag_name = bag_name
-        self.begin = parse_time(begin)
-        self.end = parse_time(end)
-        self.sample_freq = 10
+        bag_name, map_name, begin, end = bag_info
 
-        self.ds = Dataset.open(self.bag_name, ver=None)
+        self.bag_reader = CameraBagReader(bag_info)
+        self.load_dir = load_bag_to_disk(self.bag_reader)
 
-        self.topics = {
-            'main': '/camera1/image_color/compressed',
-            'stereo': '/camera3/image_color/compressed',
-            'gps': ''
-        }
-        
+        self.calib_manager = CalibrationManager(dataset=bag_name)
+        self.camera_calibs = self.calib_manager.get_cameras()
+
+        self.K = np.array([[0.58, 0, 0.5, 0],
+                           [0, 1.92, 0.5, 0],
+                           [0, 0, 1, 0],
+                           [0, 0, 0, 1]], dtype=np.float32)
+
     def __len__(self):
-        duration = self.end - self.begin
-        return int(duration.total_seconds() * self.sample_freq)
+        return self.bag_reader.__len__()
     
-    def get_image(self, cam_id, index, shift=0):
-        """ 
-        Arguments:
-            index: index in dataset
-            cam_id: camera id
-        """
-        td = self.begin + datetime.timedelta(seconds=index + shift / self.sample_freq)
-        _, camera = self.ds.fetch_near(self.topics[cam_id], str(td), limit=1)[0]
+    def get_image(self, cam_name, idx, shift=0):
+        fname = os.path.join(self.load_dir, '{}/{}.pkl'.format(idx+shift, cam_name))
+        with open(fname, 'rb') as f:
+            return pickle.load(f)
+    
+    def get_calibration(self, cam_name):
+        cam_id = int(cam_name.split('cam')[1])
+        intrinsic = self.camera_calibs[cam_id]['intrinsic']
+        extrinsic = self.camera_calibs[cam_id]['extrinsic']['imu-0']
+        distortion = self.camera_calibs[cam_id]['distortion'].squeeze()
+        img_shape = self.camera_calibs[cam_id]['img_shape']
 
-        img = Image.open((BytesIO(camera.data)))
-        return img
-        
-    def get_depth(self, index):
-        raise NotImplementedError
+        calib = {}
+        # calib['K'] = np.array(intrinsic, dtype=np.float32)
+        calib['ext_T'] = np.array(extrinsic, dtype=np.float32)
+        calib['K'] = self.K
+        return calib
 
-    def get_gps(self, index):
-        raise NotImplementedError
 
-def parse_time(ts):
-    t = time.strptime(ts, "%H:%M:%S")
-    td = datetime.timedelta(hours=t.tm_hour, minutes=t.tm_min, seconds=t.tm_sec)
-    return td
+def load_bag_to_disk(bag_reader, reload=False):
+    load_dir = "/tmp/tsdatasets/{}".format(str(bag_reader.bag_info))
+    if not reload and os.path.isdir(load_dir):
+        return load_dir
+
+    print('Loading bag to disk... ', bag_reader.bag_info)
+    for idx, data in enumerate(tqdm(bag_reader)):
+        for k, v in data.items():
+            fname = os.path.join(load_dir, '{}/{}.pkl'.format(idx, k))
+
+            if not os.path.isdir(os.path.dirname(fname)):
+                os.makedirs(os.path.dirname(fname))
+            
+            with open(fname, 'wb') as f:
+                pickle.dump(v, f, protocol=pickle.HIGHEST_PROTOCOL)
+    return load_dir
+
+
