@@ -90,9 +90,6 @@ class LocalizationModel:
         """
         all_data = []
         for cam_name in self.cam_names:
-            # Resizing here helps speed things up
-            observation[cam_name] = observation[cam_name].resize((192, 640))
-
             img0 = observation[cam_name]
             img1 = self.last_observation[cam_name]
             calib = self.get_calibration(cam_name)

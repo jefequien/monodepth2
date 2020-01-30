@@ -124,6 +124,6 @@ class CameraBagReader(BagReader):
             cam_name = 'cam{}'.format(cam_id)
             _, camera = raw_data[cam_name]
             img = Image.open(BytesIO(camera.data))
-            data[cam_name] = img
+            data[cam_name] = img.resize((288, 512))
         return data
 
