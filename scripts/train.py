@@ -11,6 +11,8 @@ from monodepth2.trainer import Trainer
 
 def setup(args):
     cfg.merge_from_file(args.config_file)
+    if args.finetune:
+        cfg.SOLVER.BASE_LR *= 0.1
 
     output_dir = cfg.OUTPUT_DIR
     if output_dir:
@@ -28,9 +30,14 @@ def setup(args):
 
 def main(args):
     cfg = setup(args)
+
     trainer = Trainer(cfg)
-    if args.resume:
+
+    if args.finetune:
+        trainer.load_checkpoint(load_optimizer=False)
+    elif args.resume:
         trainer.load_checkpoint()
+    
     trainer.train()
 
 
@@ -42,6 +49,9 @@ if __name__ == "__main__":
                         default='configs/ts.yaml')
     parser.add_argument("--resume",
                         help="resume training",
+                        action="store_true")
+    parser.add_argument("--finetune",
+                        help="finetune training",
                         action="store_true")
     args = parser.parse_args()
 

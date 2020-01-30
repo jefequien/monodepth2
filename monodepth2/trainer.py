@@ -81,8 +81,8 @@ class Trainer(object):
     
     def train(self):
         while self.epoch < self.num_epochs:
-            logger.info("Epoch {}/{}".format(self.epoch + 1, self.num_epochs))
-
+            logger.info("Epoch {}/{}  LR {}".format(self.epoch + 1, self.num_epochs, self.get_lr()))
+            
             self.run_epoch()
             self.epoch += 1
             self.model_lr_scheduler.step()
@@ -234,6 +234,10 @@ class Trainer(object):
 
         return reprojection_loss
     
+    def get_lr(self):
+        for param_group in self.model_optimizer.param_groups:
+            return param_group['lr']
+    
     def log_losses(self, losses, is_train=True):
         """Write an event to the tensorboard events file
         """
@@ -301,7 +305,7 @@ class Trainer(object):
             os.unlink(latest_model_path)
         os.symlink(os.path.basename(save_folder), latest_model_path)
     
-    def load_checkpoint(self):
+    def load_checkpoint(self, load_optimizer=True):
         """Load model(s) from disk
         """
         save_folder = os.path.join(self.output_dir, "models", "latest_weights")
@@ -310,15 +314,16 @@ class Trainer(object):
         logger.info("Loading from {}".format(save_folder))
         self.model.load_model(save_folder)
 
-        # Load trainer state
-        save_path = os.path.join(save_folder, "{}.pth".format("trainer"))
-        if os.path.isfile(save_path):
-            logger.info("Loading trainer...")
-            trainer_state = torch.load(save_path)
-            self.epoch = trainer_state['epoch']
-            self.step = trainer_state['step']
-            self.model_optimizer.load_state_dict(trainer_state['optimizer'])
-            self.model_lr_scheduler.load_state_dict(trainer_state['scheduler'])
-        else:
-            logger.info("Could not load trainer")
+        if load_optimizer:
+            # Load trainer state
+            save_path = os.path.join(save_folder, "{}.pth".format("trainer"))
+            if os.path.isfile(save_path):
+                logger.info("Loading trainer...")
+                trainer_state = torch.load(save_path)
+                self.epoch = trainer_state['epoch']
+                self.step = trainer_state['step']
+                self.model_optimizer.load_state_dict(trainer_state['optimizer'])
+                self.model_lr_scheduler.load_state_dict(trainer_state['scheduler'])
+            else:
+                logger.info("Could not load trainer")
             

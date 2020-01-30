@@ -16,7 +16,7 @@ class MapReader:
         """ Returns a Nx3 array of ENU coordinates.
         """
         landmarks = []
-        
+
         base = Point3d(*enu_coords[:3])
         self.tsmap.update_car_pos(*enu_coords[:2], async=False)
 
@@ -31,8 +31,5 @@ class MapReader:
                 landmarks.extend(lane)
             else:
                 continue
-        
-        if len(landmarks) == 0:
-            print("Warning: No landmarks!")
         
         return np.array(landmarks)

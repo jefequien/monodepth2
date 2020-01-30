@@ -34,18 +34,22 @@ def make_data_loader(cfg, is_train):
     if is_train:
         dataset_names = cfg.DATASETS.TRAIN
         shuffle = True
+        num_workers = cfg.DATALOADER.NUM_WORKERS
+        is_train_transform = True
     else:
         dataset_names = cfg.DATASETS.TEST
         shuffle = True
+        num_workers = 0
+        is_train_transform = True
     data_ids = cfg.INPUT.FRAME_IDS + cfg.INPUT.CAM_IDS
     images_per_batch = cfg.SOLVER.IMS_PER_BATCH
 
-    transform = build_transforms(cfg, is_train=True)
+    transform = build_transforms(cfg, is_train=is_train_transform)
     dataset = build_dataset(dataset_names, data_ids, transform)
     data_loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=images_per_batch,
-        num_workers=cfg.DATALOADER.NUM_WORKERS,
+        num_workers=num_workers,
         shuffle=shuffle,
         pin_memory=True,
         drop_last=True

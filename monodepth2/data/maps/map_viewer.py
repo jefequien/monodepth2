@@ -11,6 +11,8 @@ class MapViewer:
         self.map_reader = MapReader(map_name)
 
     def get_view(self, camera):
+        w, h = camera.out_shape
+        view_img = np.zeros((h,w,3), dtype='uint8')
         cam2enu, enu2cam = camera.get_transforms()
 
         t = cam2enu[:3, 3]
@@ -19,9 +21,12 @@ class MapViewer:
 
         # Filter for landmarks in front of camera (Z > 0)
         landmarks = np.array([l for l in landmarks if l[2] > 0])
+        if len(landmarks) == 0:
+            print("Warning: No landmarks!")
+            view_img = Image.fromarray(view_img, 'RGB')
+            return view_img
 
         # Project landmarks onto image plane
-        w, h = camera.out_shape
         intrinsic = scale_cam_intrinsic(camera.intrinsic, camera.img_shape, camera.out_shape)
         distortion = camera.distortion
         tcw = np.eye(4)
@@ -30,7 +35,6 @@ class MapViewer:
         img_pts[:, 0] = np.clip(img_pts[:, 0], 0, w - 1)
         img_pts[:, 1] = np.clip(img_pts[:, 1], 0, h - 1)
 
-        view_img = np.zeros((h,w,3), dtype='uint8')
         view_img = draw_points(view_img, img_pts, color=(0, 255, 0))
         view_img = Image.fromarray(view_img, 'RGB')
         return view_img
