@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Training")
     parser.add_argument('--config-file',
                         type=str, help='path to a test image or folder of images',
-                        default='configs/kitti.yaml')
+                        default='configs/ts.yaml')
     args = parser.parse_args()
 
     main(args)

@@ -1,88 +1,100 @@
 
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 import random
+import numpy as np
+from PIL import Image
 
 import torch
 import torchvision
 from torchvision.transforms import functional as F
 
+from ..maps.map_utils import scale_cam_intrinsic
 
 class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, image, target):
+    def __call__(self, data):
+        inputs = {}
         for t in self.transforms:
-            image, target = t(image, target)
-        return image, target
+            data, inputs = t(data, inputs)
+        return inputs
 
-    def __repr__(self):
-        format_string = self.__class__.__name__ + "("
-        for t in self.transforms:
-            format_string += "\n"
-            format_string += "    {0}".format(t)
-        format_string += "\n)"
-        return format_string
+class PrepareImageInputs(object):
+    def __init__(self, scales, height, width):
+        self.scales = scales
+        self.height = height
+        self.width = width
+    
+    def __call__(self, data, inputs):
+        for k, v in data.items():
+            f_id, data_type = k
+            if data_type == 'color' or data_type == 'color_aug':
+                for s in self.scales:
+                    r = 2 ** s
+                    if s == 0:
+                        inputs[data_type, f_id, s] = v
+                    else:
+                        img = inputs[data_type, f_id, s-1]
+                        size = (self.height // r, self.width // r)
+                        inputs[data_type, f_id, s] = F.resize(img, size, interpolation=Image.ANTIALIAS)
+        return data, inputs
 
+class PrepareCalibInputs(object):
+    def __init__(self, scales, height, width):
+        self.scales = scales
+        self.height = height
+        self.width = width
+
+    def __call__(self, data, inputs):
+        for k, v in data.items():
+            f_id, data_type = k
+            if data_type == 'calib':
+                # Scale intrinsic to input size
+                src_size = v['img_shape']
+                dst_size = self.width, self.height
+                K = scale_cam_intrinsic(v['K'], src_size, dst_size)
+
+                for s in self.scales:
+                    K_s = K.copy()
+                    K_s[0, :] *= self.width // (2 ** s)
+                    K_s[1, :] *= self.height // (2 ** s)
+
+                    inputs["K", f_id, s] = torch.from_numpy(K_s)
+                    inputs[("inv_K", f_id, s)] = torch.from_numpy(np.linalg.pinv(K_s))
+        return data, inputs
+
+class ToTensorInputs(object):
+    def __call__(self, data, inputs):
+        for k,v in inputs.items():
+            data_type, f_id, s = k
+            if data_type == 'color' or data_type == 'color_aug':
+                inputs[k] = F.to_tensor(v)
+        return data, inputs
 
 class Resize(object):
-    def __init__(self, min_size, max_size):
-        if not isinstance(min_size, (list, tuple)):
-            min_size = (min_size,)
-        self.min_size = min_size
-        self.max_size = max_size
-
-    # modified from torchvision to add support for max size
-    def get_size(self, image_size):
-        w, h = image_size
-        size = random.choice(self.min_size)
-        max_size = self.max_size
-        if max_size is not None:
-            min_original_size = float(min((w, h)))
-            max_original_size = float(max((w, h)))
-            if max_original_size / min_original_size * size > max_size:
-                size = int(round(max_size * min_original_size / max_original_size))
-
-        if (w <= h and w == size) or (h <= w and h == size):
-            return (h, w)
-
-        if w < h:
-            ow = size
-            oh = int(size * h / w)
-        else:
-            oh = size
-            ow = int(size * w / h)
-
-        return (oh, ow)
-
-    def __call__(self, image, target=None):
-        size = self.get_size(image.size)
-        image = F.resize(image, size)
-        if target is None:
-            return image
-        target = target.resize(image.size)
-        return image, target
-
+    def __init__(self, height, width):
+        self.height = height
+        self.width = width
+    
+    def __call__(self, data, inputs):
+        for k, v in data.items():
+            f_id, data_type = k
+            if data_type == 'color':
+                data[f_id, 'color'] = F.resize(v, (self.height, self.width))
+        return data, inputs
 
 class RandomHorizontalFlip(object):
     def __init__(self, prob=0.5):
         self.prob = prob
 
-    def __call__(self, image, target):
-        if random.random() < self.prob:
-            image = F.hflip(image)
-            target = target.transpose(0)
-        return image, target
-
-class RandomVerticalFlip(object):
-    def __init__(self, prob=0.5):
-        self.prob = prob
-
-    def __call__(self, image, target):
-        if random.random() < self.prob:
-            image = F.vflip(image)
-            target = target.transpose(1)
-        return image, target
+    def __call__(self, data, inputs):
+        do_flip = random.random() < self.prob
+        if do_flip:
+            for k,v in data.items():
+                f_id, data_type = k
+                if data_type == 'color':
+                    data[f_id, 'color'] = F.hflip(v)
+        return data, inputs
 
 class ColorJitter(object):
     def __init__(self,
@@ -97,26 +109,11 @@ class ColorJitter(object):
             saturation=saturation,
             hue=hue,)
 
-    def __call__(self, image, target):
-        image = self.color_jitter(image)
-        return image, target
-
-
-class ToTensor(object):
-    def __call__(self, image, target):
-        return F.to_tensor(image), target
-
-
-class Normalize(object):
-    def __init__(self, mean, std, to_bgr255=True):
-        self.mean = mean
-        self.std = std
-        self.to_bgr255 = to_bgr255
-
-    def __call__(self, image, target=None):
-        if self.to_bgr255:
-            image = image[[2, 1, 0]] * 255
-        image = F.normalize(image, mean=self.mean, std=self.std)
-        if target is None:
-            return image
-        return image, target
+    def __call__(self, data, inputs):
+        jittered = {}
+        for k,v in data.items():
+            f_id, data_type = k
+            if data_type == 'color':
+                jittered[f_id, 'color_aug'] = self.color_jitter(v)
+        data.update(jittered)
+        return data, inputs

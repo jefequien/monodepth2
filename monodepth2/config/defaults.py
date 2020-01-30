@@ -9,7 +9,6 @@ _C.MODEL.NAME = "default"
 _C.MODEL.DEVICE = "cuda"
 
 _C.MODEL.NUM_LAYERS = 18 # resnet layers
-_C.MODEL.SCALES = [0,1,2,3]
 
 # -----------------------------------------------------------------------------
 # INPUT
@@ -17,6 +16,11 @@ _C.MODEL.SCALES = [0,1,2,3]
 _C.INPUT = CN()
 _C.INPUT.HEIGHT = 192
 _C.INPUT.WIDTH = 640
+_C.INPUT.SCALES = [0,1,2,3]
+_C.INPUT.BRIGHTNESS = 0.2
+_C.INPUT.CONTRAST = 0.2
+_C.INPUT.SATURATION = 0.2
+_C.INPUT.HUE = 0.1
 
 _C.INPUT.FRAME_IDS = [0,-1,1] # from 'main'
 _C.INPUT.CAM_IDS = [] # stereo, cam0, cam1, ...

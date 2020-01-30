@@ -56,25 +56,17 @@ class LocalizationModel:
         if not self.initialized:
             self.initialize(observation)
         
-        self.timers[0] = time.time()
-
         all_data = self.prepare_data(observation)
-        self.timers[1] = time.time()
-
         all_preds = self.model.predict(all_data)
-        
-        self.timers[2] = time.time()
 
         # Update from predictions
         for cam_name, data, cam_T, depth in zip(self.cam_names, all_data, all_preds['cam_T'], all_preds['depth']):
 
-            self.map_cameras[cam_name].apply_T(cam_T)
+            self.map_cameras[cam_name].set_position(observation['gps_data'])
+            # self.map_cameras[cam_name].apply_T(cam_T)
 
             # Visualize
-            size = data[0].size
-            size = (size[0] // 2, size[1] // 2)
-            color_img = data[0].resize(size, Image.ANTIALIAS)
-
+            color_img = data[0, 'color']
             depth_img = vis_depth(depth)
 
             pose_img = self.map_viewer.get_view(self.map_cameras[cam_name])
@@ -84,15 +76,6 @@ class LocalizationModel:
             self.vis_images['{} color'.format(cam_name)] = color_img
             self.vis_images['{} depth'.format(cam_name)] = depth_img
         self.show()
-        
-        self.timers[3] = time.time()
-        print("Pre:{}, Inf: {}, Vis: {}, Other: {}".format(
-            self.timers[1]-self.timers[0],
-            self.timers[2]-self.timers[1],
-            self.timers[3]-self.timers[2],
-            self.timers[0]-self.timers[4],
-        ))
-        self.timers[4] = time.time()
 
         self.last_observation = observation
         return None
@@ -107,19 +90,39 @@ class LocalizationModel:
         """
         all_data = []
         for cam_name in self.cam_names:
-            cam_id = int(cam_name.replace('cam', ''))
-            calibs = {}
-            calibs['K'] = self.camera_calibs[cam_id]['intrinsic']
-            calibs['ext_T'] = self.camera_calibs[cam_id]['extrinsic']['imu-0']
+            # Resizing here helps speed things up
+            observation[cam_name] = observation[cam_name].resize((192, 640))
+
+            img0 = observation[cam_name]
+            img1 = self.last_observation[cam_name]
+            calib = self.get_calibration(cam_name)
 
             data = {}
-            data[0] = observation[cam_name]
-            data[-1] = self.last_observation[cam_name]
-            data[0, 'calib'] = calibs
-            data[-1, 'calib'] = calibs
+            data[0, 'color'] = img0
+            data[0, 'calib'] = calib
+            data[-1, 'color'] = img1
+            data[-1, 'calib'] = calib
 
             all_data.append(data)
         return all_data
+    
+    def get_calibration(self, cam_name):
+        """From TSDataset
+        """
+        cam_id = int(cam_name.replace('cam', ''))
+        intrinsic = self.camera_calibs[cam_id]['intrinsic']
+        extrinsic = self.camera_calibs[cam_id]['extrinsic']['imu-0']
+        distortion = self.camera_calibs[cam_id]['distortion'].squeeze()
+        img_shape = self.camera_calibs[cam_id]['img_shape']
+
+        K = np.eye(4)
+        K[:3,:3] = intrinsic
+        
+        calib = {}
+        calib['K'] = np.array(K, dtype=np.float32)
+        calib['ext_T'] = np.array(extrinsic, dtype=np.float32)
+        calib['img_shape'] = np.array(img_shape, dtype=np.float32)
+        return calib
 
     def show(self):
         for name, img in self.vis_images.items():

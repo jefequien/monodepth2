@@ -4,7 +4,7 @@ from .pose_decoder import PoseDecoder
 
 def build_models(cfg):
     depth_encoder = ResnetEncoder(cfg.MODEL.NUM_LAYERS, pretrained=True)
-    depth_decoder = DepthDecoder(depth_encoder.num_ch_enc, cfg.MODEL.SCALES)
+    depth_decoder = DepthDecoder(depth_encoder.num_ch_enc, cfg.INPUT.SCALES)
 
     pose_encoder = ResnetEncoder(cfg.MODEL.NUM_LAYERS, pretrained=True, num_input_images=2)
     pose_decoder = PoseDecoder(

@@ -18,20 +18,20 @@ class SyncedDataset(data.Dataset):
             if isinstance(data_id, int):
                 # Get time shifted image from cam1
                 cam_name = 'cam1'
-                data[data_id] = self.get_image(cam_name, index, shift=data_id)
-                data[(data_id, 'calib')] = self.get_calibration(cam_name)
+                data[data_id, 'color'] = self.get_image(cam_name, index, shift=data_id)
+                data[data_id, 'calib'] = self.get_calibration(cam_name)
 
             elif 'cam' in data_id:
                 # Get image for other cameras
                 cam_name = data_id
-                data[data_id] = self.get_image(cam_name, index, shift=0)
-                data[(data_id, 'calib')] = self.get_calibration(cam_name)
+                data[data_id, 'color'] = self.get_image(cam_name, index, shift=0)
+                data[data_id, 'calib'] = self.get_calibration(cam_name)
             
             elif data_id == "gps":
-                data[data_id] = self.get_gps(index)
+                data['gps'] = self.get_gps(index)
 
             elif data_id == "depth":
-                data[data_id] = self.get_depth(index)
+                data['depth'] = self.get_depth(index)
 
             else:
                 raise Exception("Data id not recognized: {}".format(data_id))

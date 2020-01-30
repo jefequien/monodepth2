@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 
 from monodepth2.data.transforms import build_transforms
@@ -12,7 +13,6 @@ class MonodepthModel(object):
 
     def __init__(self, cfg):
         self.device = cfg.MODEL.DEVICE
-        self.scales = cfg.MODEL.SCALES
         
         self.output_dir = cfg.OUTPUT_DIR
 
@@ -33,7 +33,7 @@ class MonodepthModel(object):
                     batch_inputs[k] = []
                 batch_inputs[k].append(v)
         batch_inputs = {k: torch.stack(v) for k,v in batch_inputs.items()}
-        
+
         outputs = {}
         with torch.no_grad():
             _, outputs = self.process_batch(batch_inputs)

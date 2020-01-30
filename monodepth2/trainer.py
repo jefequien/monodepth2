@@ -21,10 +21,10 @@ class Trainer(object):
 
     def __init__(self, cfg):
         self.device = cfg.MODEL.DEVICE
-        self.scales = cfg.MODEL.SCALES
 
         self.height = cfg.INPUT.HEIGHT
         self.width = cfg.INPUT.WIDTH
+        self.scales = cfg.INPUT.SCALES
         self.frame_ids = cfg.INPUT.FRAME_IDS
         assert self.height % 32 == 0, "'height' must be a multiple of 32"
         assert self.width % 32 == 0, "'width' must be a multiple of 32"
