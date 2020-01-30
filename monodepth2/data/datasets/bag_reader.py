@@ -39,7 +39,7 @@ class BagReader(object):
         # Parse time at the end
         self.begin = self.parse_time(0 if begin is None else begin)
         self.end = self.parse_time('-0' if end is None else end)
-        self.sample_freq = 20 # in FPS
+        self.sample_freq = 10 # in FPS
     
     def __iter__(self):
         keys, topic_list = zip(*self.topics.items())

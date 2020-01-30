@@ -62,8 +62,8 @@ class LocalizationModel:
         # Update from predictions
         for cam_name, data, cam_T, depth in zip(self.cam_names, all_data, all_preds['cam_T'], all_preds['depth']):
 
-            self.map_cameras[cam_name].set_position(observation['gps_data'])
-            # self.map_cameras[cam_name].apply_T(cam_T)
+            # self.map_cameras[cam_name].set_position(observation['gps_data'])
+            self.map_cameras[cam_name].apply_T(cam_T)
 
             # Visualize
             color_img = data[0, 'color']

@@ -32,8 +32,8 @@ def main(args):
 
     bag_name = '2019-12-17-13-24-03'
     map_name = 'feature=base&ver=2019121700&base_pt=(32.75707,-111.55757)&end_pt=(32.092537212,-110.7892506)'
-    begin = '0:20:00'
-    end = '0:37:00'
+    begin = '0:43:00'
+    end = '0:45:00'
     bag_info = bag_name, map_name, begin, end
     bag_reader = CameraBagReader(bag_info)
 
