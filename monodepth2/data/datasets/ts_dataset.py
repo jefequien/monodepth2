@@ -38,14 +38,16 @@ class TSDataset(SyncedDataset):
         extrinsic = self.camera_calibs[cam_id]['extrinsic']['imu-0']
         distortion = self.camera_calibs[cam_id]['distortion'].squeeze()
         img_shape = self.camera_calibs[cam_id]['img_shape']
-
+        
+        # Scale intrinsic to be per unit size
         K = np.eye(4)
         K[:3,:3] = intrinsic
+        K[0, :] /= img_shape[0] # width
+        K[1, :] /= img_shape[1] # height
         
         calib = {}
         calib['K'] = np.array(K, dtype=np.float32)
         calib['ext_T'] = np.array(extrinsic, dtype=np.float32)
-        calib['img_shape'] = np.array(img_shape, dtype=np.float32)
         return calib
 
 

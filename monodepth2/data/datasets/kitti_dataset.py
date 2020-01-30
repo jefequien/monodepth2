@@ -47,7 +47,6 @@ class KITTIDataset(SyncedDataset):
         calib = {}
         calib['K'] = K
         calib['ext_T'] = None
-        calib['img_shape'] = np.array([192, 640], dtype=np.float32)
         return calib
 
 def pil_loader(path):

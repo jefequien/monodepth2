@@ -7,8 +7,6 @@ import torch
 import torchvision
 from torchvision.transforms import functional as F
 
-from ..maps.map_utils import scale_cam_intrinsic
-
 class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
@@ -49,12 +47,9 @@ class PrepareCalibInputs(object):
         for k, v in data.items():
             f_id, data_type = k
             if data_type == 'calib':
-                # Scale intrinsic to input size
-                src_size = v['img_shape']
-                dst_size = self.width, self.height
-                K = scale_cam_intrinsic(v['K'], src_size, dst_size)
-
+                K = v['K']
                 for s in self.scales:
+                    # Scale intrinsic
                     K_s = K.copy()
                     K_s[0, :] *= self.width // (2 ** s)
                     K_s[1, :] *= self.height // (2 ** s)

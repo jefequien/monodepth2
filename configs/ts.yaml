@@ -8,5 +8,6 @@ DATASETS:
   TEST: ("ts_val",)
 SOLVER:
   IMS_PER_BATCH: 4
+  VAL_FREQ: 10
 
 OUTPUT_DIR: "./output/ts"

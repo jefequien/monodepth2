@@ -1,9 +1,13 @@
 MODEL:
   NAME: "kitti"
+INPUT:
+  HEIGHT: 288 #192
+  WIDTH: 512 #640
 DATASETS:
   TRAIN: ("kitti_train",)
   TEST: ("kitti_val",)
 SOLVER:
   IMS_PER_BATCH: 4
+  VAL_FREQ: 10
 
 OUTPUT_DIR: "./output/kitti"
