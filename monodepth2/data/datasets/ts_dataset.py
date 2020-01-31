@@ -50,9 +50,17 @@ class TSDataset(SyncedDataset):
         calib['ext_T'] = np.array(extrinsic, dtype=np.float32)
         return calib
 
+    def get_gps(self, idx, shift=0):
+        """Shift by one."""
+        bag_idx = idx + 1 + shift
+        fname = os.path.join(self.load_dir, '{}/{}.pkl'.format(bag_idx, 'gps_data'))
+        with open(fname, 'rb') as f:
+            gps_data = pickle.load(f)
+            return np.array(gps_data, dtype=np.float32)
+
 
 def load_bag_to_disk(bag_reader, reload=False):
-    load_dir = "/tmp/tsdatasets/{}".format(str(bag_reader.bag_info))
+    load_dir = "/tmp/tsdataset/{}".format(str(bag_reader.bag_info))
     if os.path.isdir(load_dir) and not reload:
         return load_dir
 

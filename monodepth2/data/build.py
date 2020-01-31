@@ -41,7 +41,7 @@ def make_data_loader(cfg, is_train):
         shuffle = True
         num_workers = 0
         is_train_transform = True
-    data_ids = cfg.INPUT.FRAME_IDS + cfg.INPUT.CAM_IDS
+    data_ids = cfg.INPUT.FRAME_IDS + cfg.INPUT.CAM_IDS + cfg.INPUT.AUX_IDS
     images_per_batch = cfg.SOLVER.IMS_PER_BATCH
 
     transform = build_transforms(cfg, is_train=is_train_transform)

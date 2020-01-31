@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 import torch
 import torch.optim as optim
+from torch.nn import MSELoss
 from tensorboardX import SummaryWriter
 
 from monodepth2.model import MonodepthModel
@@ -66,6 +67,8 @@ class Trainer(object):
         # Loss
         self.ssim = SSIM()
         self.ssim.to(self.device)
+        self.gps_loss = MSELoss()
+        self.gps_loss.to(self.device)
 
         self.backproject_depth = {}
         self.project_3d = {}
@@ -182,9 +185,20 @@ class Trainer(object):
             loss += self.disparity_smoothness * smooth_loss / (2 ** scale)
             total_loss += loss
             losses["loss/{}".format(scale)] = loss
-
         total_loss /= len(self.scales)
-        losses["loss"] = total_loss
+
+        # GPS loss
+        gps_loss = 0
+        for frame_id in self.frame_ids[1:]:
+            pred_trans = outputs[("translation", 0, frame_id)][:,0]
+            targ_trans = inputs['gps_delta', frame_id]
+            pred_norm = torch.norm(pred_trans, dim=2)
+            targ_norm = torch.norm(targ_trans, dim=1, keepdim=True)
+            gps_loss += self.gps_loss(pred_norm, targ_norm)
+        losses["loss/gps"] = gps_loss
+
+        # Total losses
+        losses["loss"] = total_loss + gps_loss
         return losses
 
     def generate_images_pred(self, inputs, outputs):

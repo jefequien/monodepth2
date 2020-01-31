@@ -17,6 +17,22 @@ class Compose(object):
             data, inputs = t(data, inputs)
         return inputs
 
+class PrepareAuxInputs(object):
+    def __init__(self, aux_ids):
+        self.aux_ids = aux_ids
+    
+    def __call__(self, data, inputs):
+        for aux_id in self.aux_ids:
+            if aux_id == 'gps':
+                gps0 = data[0, 'gps'][:3]
+                gps_1 = data[-1, 'gps'][:3]
+                gps1 = data[1, 'gps'][:3]
+                inputs['gps_delta', 1] = (gps1 - gps0) * 0.1
+                inputs['gps_delta', -1] = (gps0 - gps_1) * 0.1
+            else:
+                raise Exception('Auxilliary data id not recognized: {}'.format(aux_id))
+        return data, inputs
+
 class PrepareImageInputs(object):
     def __init__(self, scales, height, width):
         self.scales = scales
@@ -61,7 +77,7 @@ class PrepareCalibInputs(object):
 class ToTensorInputs(object):
     def __call__(self, data, inputs):
         for k,v in inputs.items():
-            data_type, f_id, s = k
+            data_type = k[0]
             if data_type == 'color' or data_type == 'color_aug':
                 inputs[k] = F.to_tensor(v)
         return data, inputs

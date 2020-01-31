@@ -28,7 +28,9 @@ class SyncedDataset(data.Dataset):
                 data[data_id, 'calib'] = self.get_calibration(cam_name)
             
             elif data_id == "gps":
-                data['gps'] = self.get_gps(index)
+                data[1, 'gps'] = self.get_gps(index , shift=1)
+                data[0, 'gps'] = self.get_gps(index)
+                data[-1, 'gps'] = self.get_gps(index, shift=-1)
 
             elif data_id == "depth":
                 data['depth'] = self.get_depth(index)
@@ -52,7 +54,7 @@ class SyncedDataset(data.Dataset):
     def get_depth(self, index):
         raise NotImplementedError
 
-    def get_gps(self, index):
+    def get_gps(self, index, shift=0):
         raise NotImplementedError
 
 

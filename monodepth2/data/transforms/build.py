@@ -28,6 +28,7 @@ def build_transforms(cfg, is_train=True):
     if is_train:
         width = cfg.INPUT.WIDTH
         height = cfg.INPUT.HEIGHT
+        aux_ids = cfg.INPUT.AUX_IDS
         scales = cfg.INPUT.SCALES
         flip_horizontal_prob = 0.0
         brightness = cfg.INPUT.BRIGHTNESS
@@ -37,6 +38,7 @@ def build_transforms(cfg, is_train=True):
     else:
         width = cfg.INPUT.WIDTH
         height = cfg.INPUT.HEIGHT
+        aux_ids = []
         scales = [0]
         flip_horizontal_prob = 0.0
         brightness = 0.0
@@ -51,6 +53,7 @@ def build_transforms(cfg, is_train=True):
             # T.RandomHorizontalFlip(flip_horizontal_prob),
             T.PrepareImageInputs(scales, height, width),
             T.PrepareCalibInputs(scales, height, width), 
+            T.PrepareAuxInputs(aux_ids), 
             T.ToTensorInputs(),
         ]
     )

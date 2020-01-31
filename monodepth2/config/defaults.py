@@ -22,8 +22,9 @@ _C.INPUT.CONTRAST = 0.2
 _C.INPUT.SATURATION = 0.2
 _C.INPUT.HUE = 0.1
 
-_C.INPUT.FRAME_IDS = [0,-1,1] # from 'main'
-_C.INPUT.CAM_IDS = [] # stereo, cam0, cam1, ...
+_C.INPUT.FRAME_IDS = [0,-1,1] # from 'cam1'
+_C.INPUT.CAM_IDS = [] # cam2, cam3, ...
+_C.INPUT.AUX_IDS = ['gps'] # gps, depth, ...
 
 
 # -----------------------------------------------------------------------------
