@@ -343,6 +343,11 @@ class Trainer(object):
                 self.step = trainer_state['step']
                 self.model_optimizer.load_state_dict(trainer_state['optimizer'])
                 self.model_lr_scheduler.load_state_dict(trainer_state['scheduler'])
+                # https://github.com/pytorch/pytorch/issues/2830
+                for state in self.model_optimizer.state.values():
+                    for k, v in state.items():
+                        if torch.is_tensor(v):
+                            state[k] = v.cuda()
             else:
                 logger.info("Could not load trainer")
             
