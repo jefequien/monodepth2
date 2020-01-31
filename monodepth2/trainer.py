@@ -343,19 +343,9 @@ class Trainer(object):
                 trainer_state = torch.load(save_path)
                 self.epoch = trainer_state['epoch']
                 self.step = trainer_state['step']
-
-                # self.model_optimizer = optim.Adam(self.model.parameters_to_train(), self.cfg.SOLVER.BASE_LR)
-                # self.model_lr_scheduler = optim.lr_scheduler.StepLR(
-                #     self.model_optimizer, self.cfg.SOLVER.SCHEDULER_STEP_SIZE, self.cfg.SOLVER.SCHEDULER_GAMMA)
-
-                self.model_optimizer.load_state_dict(trainer_state['optimizer'])
                 self.model_lr_scheduler.load_state_dict(trainer_state['scheduler'])
-
-                # https://github.com/pytorch/pytorch/issues/2830
-                # for state in self.model_optimizer.state.values():
-                #     for k, v in state.items():
-                #         if torch.is_tensor(v):
-                #             state[k] = v.cuda()
+                logger.info("Unresolved issue: Unable to load saved optimizer weights.")
+                # self.model_optimizer.load_state_dict(trainer_state['optimizer'])
             else:
                 logger.info("Could not load trainer")
             
