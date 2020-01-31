@@ -134,72 +134,67 @@ class Trainer(object):
         """Compute the reprojection and smoothness losses for a minibatch
         """
         losses = {}
-        total_loss = 0
 
         # Create warped images
         self.generate_images_pred(inputs, outputs)
 
+        img_loss = 0
         for scale in self.scales:
-            loss = 0
-            reprojection_losses = []
+            scale_loss = self.compute_image_loss(inputs, outputs, scale)
+            img_loss += scale_loss
+            losses["loss/{}".format(scale)] = scale_loss
+        img_loss /= len(self.scales)
 
-            source_scale = 0
-            disp = outputs[("disp", scale)]
-            color = inputs[("color", 0, scale)]
-            target = inputs[("color", 0, source_scale)]
-
-            for frame_id in self.frame_ids[1:]:
-                pred = outputs[("color", frame_id, scale)]
-                reprojection_losses.append(self.compute_reprojection_loss(pred, target))
-
-            reprojection_loss = torch.cat(reprojection_losses, 1)
-
-            identity_reprojection_losses = []
-            for frame_id in self.frame_ids[1:]:
-                pred = inputs[("color", frame_id, source_scale)]
-                identity_reprojection_losses.append(
-                    self.compute_reprojection_loss(pred, target))
-
-            identity_reprojection_loss = torch.cat(identity_reprojection_losses, 1)
-
-            # add random numbers to break ties
-            identity_reprojection_loss += torch.randn(
-                identity_reprojection_loss.shape).cuda() * 0.00001
-
-            combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
-
-            if combined.shape[1] == 1:
-                to_optimise = combined
-            else:
-                to_optimise, idxs = torch.min(combined, dim=1)
-
-            outputs["identity_selection/{}".format(scale)] = (
-                idxs > identity_reprojection_loss.shape[1] - 1).float()
-
-            loss += to_optimise.mean()
-
-            mean_disp = disp.mean(2, True).mean(3, True)
-            norm_disp = disp / (mean_disp + 1e-7)
-            smooth_loss = get_smooth_loss(norm_disp, color)
-
-            loss += self.disparity_smoothness * smooth_loss / (2 ** scale)
-            total_loss += loss
-            losses["loss/{}".format(scale)] = loss
-        total_loss /= len(self.scales)
-
-        # GPS loss
-        gps_loss = 0
-        for frame_id in self.frame_ids[1:]:
-            pred_trans = outputs[("translation", 0, frame_id)][:,0]
-            targ_trans = inputs['gps_delta', frame_id]
-            pred_norm = torch.norm(pred_trans, dim=2)
-            targ_norm = torch.norm(targ_trans, dim=1, keepdim=True)
-            gps_loss += self.gps_loss(pred_norm, targ_norm)
+        gps_loss = self.compute_gps_loss(inputs, outputs)
         losses["loss/gps"] = gps_loss
-
-        # Total losses
-        losses["loss"] = total_loss + gps_loss
+        losses["loss"] = img_loss + gps_loss
         return losses
+
+    def compute_image_loss(self, inputs, outputs, scale):
+        loss = 0
+        reprojection_losses = []
+
+        source_scale = 0
+        disp = outputs[("disp", scale)]
+        color = inputs[("color", 0, scale)]
+        target = inputs[("color", 0, source_scale)]
+
+        for frame_id in self.frame_ids[1:]:
+            pred = outputs[("color", frame_id, scale)]
+            reprojection_losses.append(self.compute_reprojection_loss(pred, target))
+
+        reprojection_loss = torch.cat(reprojection_losses, 1)
+
+        identity_reprojection_losses = []
+        for frame_id in self.frame_ids[1:]:
+            pred = inputs[("color", frame_id, source_scale)]
+            identity_reprojection_losses.append(
+                self.compute_reprojection_loss(pred, target))
+
+        identity_reprojection_loss = torch.cat(identity_reprojection_losses, 1)
+
+        # add random numbers to break ties
+        identity_reprojection_loss += torch.randn(
+            identity_reprojection_loss.shape).cuda() * 0.00001
+
+        combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
+
+        if combined.shape[1] == 1:
+            to_optimise = combined
+        else:
+            to_optimise, idxs = torch.min(combined, dim=1)
+
+        outputs["identity_selection/{}".format(scale)] = (
+            idxs > identity_reprojection_loss.shape[1] - 1).float()
+
+        loss += to_optimise.mean()
+
+        mean_disp = disp.mean(2, True).mean(3, True)
+        norm_disp = disp / (mean_disp + 1e-7)
+        smooth_loss = get_smooth_loss(norm_disp, color)
+
+        loss += self.disparity_smoothness * smooth_loss / (2 ** scale)
+        return loss
 
     def generate_images_pred(self, inputs, outputs):
         """Generate the warped (reprojected) color images for a minibatch.
@@ -236,6 +231,16 @@ class Trainer(object):
 
                 outputs[("color_identity", frame_id, scale)] = \
                     inputs[("color", frame_id, source_scale)]
+
+    def compute_gps_loss(self, inputs, outputs):
+        gps_loss = 0
+        for frame_id in self.frame_ids[1:]:
+            pred_trans = outputs[("translation", 0, frame_id)][:,0]
+            targ_trans = inputs['gps_delta', frame_id]
+            pred_norm = torch.norm(pred_trans, dim=2)
+            targ_norm = torch.norm(targ_trans, dim=1, keepdim=True)
+            gps_loss += self.gps_loss(pred_norm, targ_norm)
+        return gps_loss
 
     def compute_reprojection_loss(self, pred, target):
         """Computes reprojection loss between a batch of predicted and target images

@@ -27,6 +27,7 @@ class PrepareAuxInputs(object):
                 gps0 = data[0, 'gps'][:3]
                 gps_1 = data[-1, 'gps'][:3]
                 gps1 = data[1, 'gps'][:3]
+                # Make gps delta smaller
                 inputs['gps_delta', 1] = (gps1 - gps0) * 0.1
                 inputs['gps_delta', -1] = (gps0 - gps_1) * 0.1
             else:
