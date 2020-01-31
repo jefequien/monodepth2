@@ -13,12 +13,9 @@ class MonodepthModel(object):
 
     def __init__(self, cfg):
         self.device = cfg.MODEL.DEVICE
-        
         self.output_dir = cfg.OUTPUT_DIR
 
         self.models = build_models(cfg)
-        self.to(self.device)
-
         self.transform = build_transforms(cfg, is_train=False)
     
     def predict(self, all_data):
@@ -109,13 +106,8 @@ class MonodepthModel(object):
         for model_name, model in self.models.items():
             logger.info("Loading {} weights...".format(model_name))
             save_path = os.path.join(save_folder, "{}.pth".format(model_name))
-            pretrained_dict = torch.load(save_path)
-
-            # Filter layers
-            model_dict = model.state_dict()
-            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
-            model_dict.update(pretrained_dict)
-            model.load_state_dict(model_dict)
+            model_dict = torch.load(save_path)
+            model.load_state_dict(model_dict, strict=False)
     
     def save_model(self, save_folder):
         """Save model weights to disk

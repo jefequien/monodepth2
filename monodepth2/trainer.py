@@ -21,6 +21,7 @@ logger = logging.getLogger('monodepth2.trainer')
 class Trainer(object):
 
     def __init__(self, cfg):
+        self.cfg = cfg
         self.device = cfg.MODEL.DEVICE
 
         self.height = cfg.INPUT.HEIGHT
@@ -304,8 +305,8 @@ class Trainer(object):
         save_folder = os.path.join(self.output_dir, "models", "weights_{}".format(self.epoch))
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)
+
         logger.info("Saving to {}".format(save_folder))
-        
         self.model.save_model(save_folder)
 
         # Save trainer state
@@ -332,6 +333,7 @@ class Trainer(object):
 
         logger.info("Loading from {}".format(save_folder))
         self.model.load_model(save_folder)
+        self.model.to(self.device)
 
         if load_optimizer:
             # Load trainer state
@@ -341,13 +343,19 @@ class Trainer(object):
                 trainer_state = torch.load(save_path)
                 self.epoch = trainer_state['epoch']
                 self.step = trainer_state['step']
+
+                # self.model_optimizer = optim.Adam(self.model.parameters_to_train(), self.cfg.SOLVER.BASE_LR)
+                # self.model_lr_scheduler = optim.lr_scheduler.StepLR(
+                #     self.model_optimizer, self.cfg.SOLVER.SCHEDULER_STEP_SIZE, self.cfg.SOLVER.SCHEDULER_GAMMA)
+
                 self.model_optimizer.load_state_dict(trainer_state['optimizer'])
                 self.model_lr_scheduler.load_state_dict(trainer_state['scheduler'])
+
                 # https://github.com/pytorch/pytorch/issues/2830
-                for state in self.model_optimizer.state.values():
-                    for k, v in state.items():
-                        if torch.is_tensor(v):
-                            state[k] = v.cuda()
+                # for state in self.model_optimizer.state.values():
+                #     for k, v in state.items():
+                #         if torch.is_tensor(v):
+                #             state[k] = v.cuda()
             else:
                 logger.info("Could not load trainer")
             
