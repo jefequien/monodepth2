@@ -67,8 +67,8 @@ class TSDataset(SyncedDataset):
 
 def load_bag_to_disk(bag_reader, reload=False):
     load_dir = "/tmp/tsdataset/{}".format(str(bag_reader.bag_info))
-    # if os.path.isdir(load_dir) and not reload:
-    #     return load_dir
+    if os.path.isdir(load_dir) and not reload:
+        return load_dir
 
     print('Loading bag to disk... ', bag_reader.bag_info)
     for idx, data in enumerate(tqdm(bag_reader)):

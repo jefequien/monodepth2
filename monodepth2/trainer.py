@@ -138,18 +138,95 @@ class Trainer(object):
 
         # Create warped images
         self.generate_images_pred(inputs, outputs)
+        self.generate_map_view_pred(inputs, outputs)
 
-        img_loss = 0
+        total_loss = 0
         for scale in self.scales:
-            scale_loss = self.compute_image_loss(inputs, outputs, scale)
-            img_loss += scale_loss
-            losses["loss/{}".format(scale)] = scale_loss
-        img_loss /= len(self.scales)
+            img_loss = self.compute_image_loss(inputs, outputs, scale)
+            total_loss += img_loss
+            losses["loss/{}".format(scale)] = img_loss
+        total_loss /= len(self.scales)
 
         gps_loss = self.compute_gps_loss(inputs, outputs)
         losses["loss/gps"] = gps_loss
-        losses["loss"] = img_loss + gps_loss
+        landmark_loss = self.compute_landmark_loss(inputs, outputs)
+        losses["loss/landmark"] = landmark_loss
+
+        losses["loss"] = total_loss + gps_loss + landmark_loss
         return losses
+
+    def generate_images_pred(self, inputs, outputs):
+        """Generate the warped (reprojected) color images for a minibatch.
+        Generated images are saved into the `outputs` dictionary.
+        """
+        for scale in self.scales:
+            disp = outputs[("disp", scale)]
+            disp = F.interpolate(
+                disp, [self.height, self.width], mode="bilinear", align_corners=False)
+            source_scale = 0
+
+            _, depth = disp_to_depth(disp, self.min_depth, self.max_depth)
+
+            outputs[("depth", 0, scale)] = depth
+
+            for i, frame_id in enumerate(self.frame_ids[1:]):
+
+                if frame_id == "s":
+                    T = inputs["stereo_T"]
+                else:
+                    T = outputs[("cam_T_cam", 0, frame_id)]
+
+                cam_points = self.backproject_depth[source_scale](
+                    depth, inputs[("inv_K", frame_id, source_scale)])
+                pix_coords = self.project_3d[source_scale](
+                    cam_points, inputs[("K", frame_id, source_scale)], T)
+
+                outputs[("sample", frame_id, scale)] = pix_coords
+
+                outputs[("color", frame_id, scale)] = F.grid_sample(
+                    inputs[("color", frame_id, source_scale)],
+                    outputs[("sample", frame_id, scale)],
+                    padding_mode="border")
+
+                outputs[("color_identity", frame_id, scale)] = \
+                    inputs[("color", frame_id, source_scale)]
+    
+
+    def generate_map_view_pred(self, inputs, outputs):
+        """Generate the warped (reprojected) color images for a minibatch.
+        Generated images are saved into the `outputs` dictionary.
+        """
+        for scale in self.scales:
+            disp = outputs[("disp", scale)]
+            disp = F.interpolate(
+                disp, [self.height, self.width], mode="bilinear", align_corners=False)
+            source_scale = 0
+
+            _, depth = disp_to_depth(disp, self.min_depth, self.max_depth)
+
+            outputs[("depth", 0, scale)] = depth
+
+            for i, frame_id in enumerate(self.frame_ids[1:]):
+
+                if frame_id == "s":
+                    T = inputs["stereo_T"]
+                else:
+                    T = outputs[("cam_T_cam", 0, frame_id)]
+
+                cam_points = self.backproject_depth[source_scale](
+                    depth, inputs[("inv_K", frame_id, source_scale)])
+                pix_coords = self.project_3d[source_scale](
+                    cam_points, inputs[("K", frame_id, source_scale)], T)
+
+                outputs[("sample", frame_id, scale)] = pix_coords
+
+                outputs[("map_view", frame_id, scale)] = F.grid_sample(
+                    inputs[("map_view", frame_id, source_scale)],
+                    outputs[("sample", frame_id, scale)],
+                    padding_mode="border")
+
+                outputs[("map_view_identity", frame_id, scale)] = \
+                    inputs[("map_view", frame_id, source_scale)]
 
     def compute_image_loss(self, inputs, outputs, scale):
         loss = 0
@@ -197,41 +274,19 @@ class Trainer(object):
         loss += self.disparity_smoothness * smooth_loss / (2 ** scale)
         return loss
 
-    def generate_images_pred(self, inputs, outputs):
-        """Generate the warped (reprojected) color images for a minibatch.
-        Generated images are saved into the `outputs` dictionary.
-        """
-        for scale in self.scales:
-            disp = outputs[("disp", scale)]
-            disp = F.interpolate(
-                disp, [self.height, self.width], mode="bilinear", align_corners=False)
-            source_scale = 0
+    def compute_landmark_loss(self, inputs, outputs):
+        reprojection_losses = []
 
-            _, depth = disp_to_depth(disp, self.min_depth, self.max_depth)
+        source_scale = 0
+        landmark = outputs[("landmark", source_scale)]
 
-            outputs[("depth", 0, scale)] = depth
+        for frame_id in self.frame_ids[1:]:
+            remapped = outputs[("map_view", frame_id, source_scale)]
+            reprojection_losses.append(self.compute_reprojection_loss(landmark, remapped))
 
-            for i, frame_id in enumerate(self.frame_ids[1:]):
-
-                if frame_id == "s":
-                    T = inputs["stereo_T"]
-                else:
-                    T = outputs[("cam_T_cam", 0, frame_id)]
-
-                cam_points = self.backproject_depth[source_scale](
-                    depth, inputs[("inv_K", frame_id, source_scale)])
-                pix_coords = self.project_3d[source_scale](
-                    cam_points, inputs[("K", frame_id, source_scale)], T)
-
-                outputs[("sample", frame_id, scale)] = pix_coords
-
-                outputs[("color", frame_id, scale)] = F.grid_sample(
-                    inputs[("color", frame_id, source_scale)],
-                    outputs[("sample", frame_id, scale)],
-                    padding_mode="border")
-
-                outputs[("color_identity", frame_id, scale)] = \
-                    inputs[("color", frame_id, source_scale)]
+        reprojection_loss = torch.cat(reprojection_losses, 1)
+        loss = reprojection_loss.mean()
+        return loss
 
     def compute_gps_loss(self, inputs, outputs):
         gps_loss = 0
@@ -273,6 +328,12 @@ class Trainer(object):
 
         num_images = min(4, self.batch_size) # write a maxmimum of four images
         for j in range(num_images): 
+            writer.add_image(
+                "landmark/{}".format(j),
+                normalize_image(outputs[("landmark", 0)][j]), 
+                self.step
+            )
+
             for s in self.scales:
                 for frame_id in self.frame_ids:
                     writer.add_image(
@@ -289,6 +350,11 @@ class Trainer(object):
                         writer.add_image(
                             "color_pred_{}_{}/{}".format(frame_id, s, j),
                             outputs[("color", frame_id, s)][j].data, 
+                            self.step
+                        )
+                        writer.add_image(
+                            "map_view_pred_{}_{}/{}".format(frame_id, s, j),
+                            outputs[("map_view", frame_id, s)][j].data, 
                             self.step
                         )
 

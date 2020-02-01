@@ -47,11 +47,13 @@ class MonodepthModel(object):
         inputs = {k:v.to(self.device) for k,v in inputs.items()}
         depth_features = self.models["depth_encoder"](inputs["color_aug", 0, 0])
         depth_outputs = self.models["depth_decoder"](depth_features)
+        landmark_outputs = self.models["landmark_decoder"](depth_features)
         pose_outputs = self.predict_poses(inputs)
 
         outputs = {}
         outputs.update(depth_outputs)
         outputs.update(pose_outputs)
+        outputs.update(landmark_outputs)
         return inputs, outputs
     
     def predict_poses(self, inputs):
@@ -106,8 +108,11 @@ class MonodepthModel(object):
         for model_name, model in self.models.items():
             logger.info("Loading {} weights...".format(model_name))
             save_path = os.path.join(save_folder, "{}.pth".format(model_name))
-            model_dict = torch.load(save_path)
-            model.load_state_dict(model_dict, strict=False)
+            if os.path.isfile(save_path):
+                model_dict = torch.load(save_path)
+                model.load_state_dict(model_dict, strict=False)
+            else:
+                logger.info("Could not load {} weights".format(model_name))
     
     def save_model(self, save_folder):
         """Save model weights to disk
