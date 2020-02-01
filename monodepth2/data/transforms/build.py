@@ -53,7 +53,7 @@ def build_transforms(cfg, is_train=True):
             # T.RandomHorizontalFlip(flip_horizontal_prob),
             T.PrepareImageInputs(scales, height, width),
             T.PrepareCalibInputs(scales, height, width), 
-            T.PrepareAuxInputs(aux_ids), 
+            T.PrepareAuxInputs(aux_ids, scales, height, width), 
             T.ToTensorInputs(),
         ]
     )

@@ -280,6 +280,11 @@ class Trainer(object):
                         inputs[("color", frame_id, s)][j].data,
                         self.step
                     )
+                    writer.add_image(
+                        "map_view_{}_{}/{}".format(frame_id, s, j),
+                        inputs[("map_view", frame_id, s)][j].data,
+                        self.step
+                    )
                     if s == 0 and frame_id != 0:
                         writer.add_image(
                             "color_pred_{}_{}/{}".format(frame_id, s, j),

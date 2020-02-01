@@ -34,6 +34,11 @@ class SyncedDataset(data.Dataset):
 
             elif data_id == "depth":
                 data['depth'] = self.get_depth(index)
+            
+            elif data_id == 'map_view':
+                data[1, 'map_view'] = self.get_map_view(index, shift=1)
+                data[0, 'map_view'] = self.get_map_view(index, shift=0)
+                data[-1, 'map_view'] = self.get_map_view(index, shift=-1)
 
             else:
                 raise Exception("Data id not recognized: {}".format(data_id))
@@ -55,6 +60,9 @@ class SyncedDataset(data.Dataset):
         raise NotImplementedError
 
     def get_gps(self, index, shift=0):
+        raise NotImplementedError
+
+    def get_map_view(self, index, shift=0):
         raise NotImplementedError
 
 

@@ -7,11 +7,16 @@ from dataset_store import Dataset
 from tsmap3 import TSMap, GNSSTransformer
 from localization_service import OfflineNovAtelService
 
+from monodepth2.utils.calibration_manager import CalibrationManager
+from ..maps.map_viewer import MapViewer, MapCamera
+
 class BagReader(object):
 
     def __init__(self, bag_info):
         bag_name, map_name, begin, end = bag_info
         version = None
+        self.bag_name = bag_name
+        self.map_name = map_name
         self.bag_info = bag_info
         self.ds = Dataset.open(bag_name, ver=version)
 
@@ -117,6 +122,16 @@ class CameraBagReader(BagReader):
         self.cam_ids = [1,3]
         for cam_id in self.cam_ids:
             self.add_topic('cam{}'.format(cam_id), '/camera{}/image_color/compressed'.format(cam_id))
+
+        
+        # Map View
+        self.calib_manager = CalibrationManager(dataset=self.bag_name)
+        self.camera_calibs = self.calib_manager.get_cameras()
+        self.map_viewer = MapViewer(self.map_name)
+        self.map_cameras = {
+            'cam{}'.format(cam_id): MapCamera(self.camera_calibs[cam_id]) 
+            for cam_id in self.camera_calibs.keys()
+        }
     
     def postprocess(self, raw_data):
         data = super(CameraBagReader, self).postprocess(raw_data)
@@ -125,5 +140,15 @@ class CameraBagReader(BagReader):
             _, camera = raw_data[cam_name]
             img = Image.open(BytesIO(camera.data))
             data[cam_name] = img.resize((512, 288))
+        
+        data['map_view/cam1'] = self.create_map_view(data)
         return data
+
+    def create_map_view(self, data):
+        cam_name = 'cam1'
+        gps_data = data['gps_data']
+        self.map_cameras[cam_name].set_position(gps_data)
+        map_view = self.map_viewer.get_view(self.map_cameras[cam_name])
+        map_view = map_view.resize((512, 288))
+        return map_view
 

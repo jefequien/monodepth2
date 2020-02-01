@@ -18,8 +18,11 @@ class Compose(object):
         return inputs
 
 class PrepareAuxInputs(object):
-    def __init__(self, aux_ids):
+    def __init__(self, aux_ids, scales, height, width):
         self.aux_ids = aux_ids
+        self.scales = scales
+        self.height = height
+        self.width = width
     
     def __call__(self, data, inputs):
         for aux_id in self.aux_ids:
@@ -30,8 +33,28 @@ class PrepareAuxInputs(object):
                 # Make gps delta smaller
                 inputs['gps_delta', 1] = (gps1 - gps0) * 0.1
                 inputs['gps_delta', -1] = (gps0 - gps_1) * 0.1
+
+            elif aux_id == 'map_view':
+                mv0 = data[0, aux_id]
+                mv1 = data[1, aux_id]
+                mv_1 = data[-1, aux_id]
+                mv0 = F.resize(mv0, (self.height, self.width), interpolation=Image.ANTIALIAS)
+                mv1 = F.resize(mv1, (self.height, self.width), interpolation=Image.ANTIALIAS)
+                mv_1 = F.resize(mv_1, (self.height, self.width), interpolation=Image.ANTIALIAS)
+
+                for s in self.scales:
+                    r = 2 ** s
+                    if s == 0:
+                        inputs[aux_id, 0, s] = mv0
+                        inputs[aux_id, 1, s] = mv1
+                        inputs[aux_id, -1, s] = mv_1
+                    else:
+                        size = (self.height // r, self.width // r)
+                        inputs[aux_id, 0, s] = F.resize(mv0, size, interpolation=Image.ANTIALIAS)
+                        inputs[aux_id, 1 , s] = F.resize(mv1, size, interpolation=Image.ANTIALIAS)
+                        inputs[aux_id, -1 , s] = F.resize(mv_1, size, interpolation=Image.ANTIALIAS)
             else:
-                raise Exception('Auxilliary data id not recognized: {}'.format(aux_id))
+                raise Exception('Auxilliary data id not recognized for transform: {}'.format(aux_id))
         return data, inputs
 
 class PrepareImageInputs(object):
@@ -78,8 +101,7 @@ class PrepareCalibInputs(object):
 class ToTensorInputs(object):
     def __call__(self, data, inputs):
         for k,v in inputs.items():
-            data_type = k[0]
-            if data_type == 'color' or data_type == 'color_aug':
+            if isinstance(v, Image.Image):
                 inputs[k] = F.to_tensor(v)
         return data, inputs
 
@@ -92,7 +114,7 @@ class Resize(object):
         for k, v in data.items():
             f_id, data_type = k
             if data_type == 'color':
-                data[f_id, 'color'] = F.resize(v, (self.height, self.width))
+                data[f_id, 'color'] = F.resize(v, (self.height, self.width), interpolation=Image.ANTIALIAS)
         return data, inputs
 
 class RandomHorizontalFlip(object):

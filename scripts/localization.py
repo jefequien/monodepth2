@@ -13,6 +13,7 @@ from monodepth2.utils.visualize import vis_depth
 class LocalizationModel:
 
     def __init__(self, cfg):
+        self.device = cfg.MODEL.DEVICE
         self.output_dir = cfg.OUTPUT_DIR
         self.vis_images = {}
 
@@ -20,6 +21,7 @@ class LocalizationModel:
         save_folder = os.path.join(self.output_dir, "models", "latest_weights")
         self.model = MonodepthModel(cfg)
         self.model.load_model(save_folder)
+        self.model.to(self.device)
         self.model.set_eval()
 
         # Localization params
@@ -44,7 +46,8 @@ class LocalizationModel:
         }
 
     def initialize(self, observation):
-        self.cam_names = [k for k in observation.keys() if 'cam' in k]
+        # self.cam_names = [k for k in observation.keys() if 'cam' in k]
+        self.cam_names = ['cam1']
         self.position = observation['gps_data']
         for cam_name in self.cam_names:
             self.map_cameras[cam_name].set_position(self.position)

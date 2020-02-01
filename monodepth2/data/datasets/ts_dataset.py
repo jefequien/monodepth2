@@ -57,12 +57,18 @@ class TSDataset(SyncedDataset):
         with open(fname, 'rb') as f:
             gps_data = pickle.load(f)
             return np.array(gps_data, dtype=np.float32)
+    
+    def get_map_view(self, idx, shift=0):
+        cam_name = 'cam1'
+        bag_idx = idx + 1 + shift
+        fname = os.path.join(self.load_dir, '{}/map_view/{}.jpg'.format(bag_idx, cam_name))
+        return Image.open(fname)
 
 
 def load_bag_to_disk(bag_reader, reload=False):
     load_dir = "/tmp/tsdataset/{}".format(str(bag_reader.bag_info))
-    if os.path.isdir(load_dir) and not reload:
-        return load_dir
+    # if os.path.isdir(load_dir) and not reload:
+    #     return load_dir
 
     print('Loading bag to disk... ', bag_reader.bag_info)
     for idx, data in enumerate(tqdm(bag_reader)):
