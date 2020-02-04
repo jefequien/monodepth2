@@ -2,7 +2,6 @@ import datetime
 import numpy as np
 from PIL import Image
 from io import BytesIO
-from scipy.sparse import coo_matrix
 
 from dataset_store import Dataset
 from tsmap3 import TSMap, GNSSTransformer

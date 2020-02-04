@@ -36,7 +36,7 @@ def main(args):
     if args.finetune:
         trainer.load_checkpoint(load_optimizer=False)
     elif args.resume:
-        trainer.load_checkpoint()
+        trainer.load_checkpoint(load_optimizer=False)
     
     trainer.train()
 

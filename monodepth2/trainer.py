@@ -271,49 +271,13 @@ class Trainer(object):
         return loss
 
     def compute_map_loss(self, inputs, outputs, scale):
-        loss = 0
-        reprojection_losses = []
+        pred = outputs[("map_view", 0, scale)]
+        target = inputs[("map_pred", 0, 0)]
+        mask = torch.max(pred, 1) == 0
 
-        source_scale = 0
-        disp = outputs[("disp", scale)]
-        color = inputs[("map_pred", 0, scale)]
-        target = inputs[("map_pred", 0, source_scale)]
-
-        for frame_id in [0]:
-            pred = outputs[("map_view", frame_id, scale)]
-            reprojection_losses.append(self.compute_reprojection_loss(pred, target))
-
-        reprojection_loss = torch.cat(reprojection_losses, 1)
-
-        identity_reprojection_losses = []
-        for frame_id in [0]:
-            pred = inputs[("map_view", frame_id, source_scale)]
-            identity_reprojection_losses.append(
-                self.compute_reprojection_loss(pred, target))
-
-        identity_reprojection_loss = torch.cat(identity_reprojection_losses, 1)
-
-        # add random numbers to break ties
-        identity_reprojection_loss += torch.randn(
-            identity_reprojection_loss.shape).cuda() * 0.00001
-
-        combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
-
-        if combined.shape[1] == 1:
-            to_optimise = combined
-        else:
-            to_optimise, idxs = torch.min(combined, dim=1)
-
-        outputs["map_identity_selection/{}".format(scale)] = (
-            idxs > identity_reprojection_loss.shape[1] - 1).float()
-
-        loss += to_optimise.mean()
-
-        mean_disp = disp.mean(2, True).mean(3, True)
-        norm_disp = disp / (mean_disp + 1e-7)
-        smooth_loss = get_smooth_loss(norm_disp, color)
-
-        loss += self.disparity_smoothness * smooth_loss / (2 ** scale)
+        reprojection_loss = self.compute_reprojection_loss(pred, target)
+        reprojection_loss[mask] = 0
+        loss = reprojection_loss.mean()
         return loss
 
     def compute_gps_loss(self, inputs, outputs):
@@ -388,7 +352,6 @@ class Trainer(object):
                     inputs[("map_view", 0, s)][j].data,
                     self.step
                 )
-
                 writer.add_image(
                     "map_pred_{}/{}".format(s, j),
                     inputs[("map_pred", 0, s)][j].data,
