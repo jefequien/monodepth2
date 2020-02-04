@@ -78,7 +78,7 @@ def draw_line(img, pts, color=(0,255,0)):
 
     pts = np.round(pts).astype(int)
     pts = pts.reshape((-1,1,2))
-    img = cv.polylines(img, [pts], False, color=color, thickness=1)
+    img = cv.polylines(img, [pts], False, color=color, thickness=2)
     return img
 
 def draw_points(img, points, values):
