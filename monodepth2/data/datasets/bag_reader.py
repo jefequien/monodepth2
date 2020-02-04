@@ -81,7 +81,7 @@ class BagReader(object):
             novatel_loc.pose.orientation.y,
             novatel_loc.pose.orientation.z,
         ])
-        gps_data[:2] += 2 * random.random() - 1
+        # gps_data[:2] += 2 * random.random() - 1
         
         data = {}
         data['gps_data'] = gps_data

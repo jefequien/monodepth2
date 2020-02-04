@@ -133,6 +133,12 @@ class MonodepthModel(object):
             parameters_to_train += list(m.parameters())
         return parameters_to_train
     
+    def parameters(self, model_names):
+        parameters = []
+        for model_name in model_names:
+            parameters += list(self.models[model_name].parameters())
+        return parameters
+    
     def load_model(self, save_folder):
         for model_name, model in self.models.items():
             logger.info("Loading {} weights...".format(model_name))

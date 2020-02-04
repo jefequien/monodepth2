@@ -84,6 +84,11 @@ class Trainer(object):
             self.project_3d[scale].to(self.device)
     
     def train(self):
+        # for p in self.model.parameters_to_train():
+        #     p.requires_grad = False
+        # for p in self.model.parameters(['map_pose_encoder', 'map_pose_decoder']):
+        #     p.requires_grad = True
+
         while self.epoch < self.num_epochs:
             logger.info("Epoch {}/{}  LR {}".format(self.epoch + 1, self.num_epochs, self.get_lr()))
             
@@ -273,11 +278,13 @@ class Trainer(object):
     def compute_map_loss(self, inputs, outputs, scale):
         pred = outputs[("map_view", 0, scale)]
         target = inputs[("map_pred", 0, 0)]
-        mask = torch.max(pred, 1) == 0
+        mask, idxs = torch.max(target, dim=1)
 
-        reprojection_loss = self.compute_reprojection_loss(pred, target)
-        reprojection_loss[mask] = 0
-        loss = reprojection_loss.mean()
+        abs_diff = torch.abs(target - pred)
+        l1_loss = abs_diff.mean(1)
+
+        loss = l1_loss * mask
+        loss = loss.mean()
         return loss
 
     def compute_gps_loss(self, inputs, outputs):
