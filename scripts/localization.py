@@ -8,7 +8,6 @@ from monodepth2.model import MonodepthModel
 from monodepth2.data.maps.map_viewer import MapViewer, MapCamera
 from monodepth2.utils.calibration_manager import CalibrationManager
 from monodepth2.utils.visualize import vis_depth
-from monodepth2.utils.drift import DriftComputer
 
 
 class LocalizationModel:
@@ -24,8 +23,6 @@ class LocalizationModel:
         self.model.load_model(save_folder)
         self.model.to(self.device)
         self.model.set_eval()
-
-        self.drift_computer = DriftComputer(cfg)
 
         # Localization params
         self.position = None
@@ -56,6 +53,7 @@ class LocalizationModel:
         for cam_name in self.cam_names:
             self.map_cameras[cam_name].set_position(self.position)
             self.map_cameras[cam_name].set_out_shape(observation['cam1'].size)
+            self.map_view, _ = self.map_viewer.get_view(self.map_cameras[cam_name])
 
         self.last_observation = observation
         self.initialized = True
@@ -67,45 +65,40 @@ class LocalizationModel:
         all_data = self.prepare_data(observation)
         all_preds = self.model.predict(all_data)
 
-        inputs = all_preds['inputs']
-        outputs = all_preds['outputs']
-
         # Update from predictions
-        for cam_name, data, cam_T, depth in zip(self.cam_names, all_data, all_preds['cam_T'], all_preds['depth']):
-            img = data[0, 'color']
-            calib = data[0, 'calib']
-            
-            if self.num_steps % 40 == 0:
-                self.map_cameras[cam_name].set_position(observation['gps_data'])
+        for cam_name, data, cam_T, drift_T, depth in zip(self.cam_names, all_data, all_preds['cam_T'], all_preds['drift_T'], all_preds['depth']):
+            img = self.last_observation['cam1']
+            map_pred = self.last_observation['map_pred/{}'.format(cam_name)]
 
             # Scale predictions by 10
             cam_T[:3, 3] *= 10
+            drift_T[:3, 3] *= 10
             depth *= 10
 
-            # Correct drift
-            lane_dets = observation['lane_dets1']
-            map_img, map_depth = self.map_viewer.get_view(self.map_cameras[cam_name])
+            # Correct last step drift
+            self.map_cameras[cam_name].apply_T(drift_T)
+            aligned_view, _ = self.map_viewer.get_view(self.map_cameras[cam_name])
 
-            # drift_T = self.drift_computer.compute_drift(map_img, lane_dets, inputs, outputs)
-            # print(drift_T)
+            # self.map_cameras[cam_name].apply_T(cam_T)
+            if self.num_steps % 1 == 0:
+                self.map_cameras[cam_name].set_position(observation['gps_data'])
 
-            # cam_T += drift_T * 0.01
-            # drift_T = compute_drift_transform(lane_dets, depth, map_img, map_depth, calib['K'])
-            # self.map_cameras[cam_name].apply_T(drift_T)
-
-            # Move camera
-            self.map_cameras[cam_name].apply_T(cam_T)
+            self.map_view, _ = self.map_viewer.get_view(self.map_cameras[cam_name])
 
             # Visualize
             depth_img = vis_depth(depth)
-            map_depth_img = vis_depth(map_depth, vmax=0.1)
+            # map_depth_img = vis_depth(map_depth, vmax=0.1)
+
+            map_vis = img.copy()
+            map_vis.paste(aligned_view, (0,0), aligned_view.convert('L'))
+            pred_vis = img.copy()
+            pred_vis.paste(map_pred, (0,0), map_pred.convert('L'))
 
             self.vis_images['{} color'.format(cam_name)] = img
-            self.vis_images['{} lane_dets'.format(cam_name)] = lane_dets
             self.vis_images['{} depth'.format(cam_name)] = depth_img
-            self.vis_images['{} map_img'.format(cam_name)] = map_img
-            self.vis_images['{} map_depth_img'.format(cam_name)] = map_depth_img
-            # color_img.paste(pose_img, (0,0), pose_img.convert('L'))
+            self.vis_images['{} map_view'.format(cam_name)] = map_vis
+            self.vis_images['{} map_pred'.format(cam_name)] = pred_vis
+            # self.vis_images['{} map_depth_img'.format(cam_name)] = map_depth_img
         self.show()
 
         self.last_observation = observation
@@ -125,12 +118,16 @@ class LocalizationModel:
             img0 = observation[cam_name]
             img1 = self.last_observation[cam_name]
             calib = self.get_calibration(cam_name)
+            map_view = self.map_view
+            map_pred = self.last_observation['map_pred/{}'.format(cam_name)]
 
             data = {}
             data[0, 'color'] = img0
             data[0, 'calib'] = calib
             data[-1, 'color'] = img1
             data[-1, 'calib'] = calib
+            data[0, 'map_view'] = map_view
+            data[0, 'map_pred'] = map_pred
 
             all_data.append(data)
         return all_data

@@ -2,6 +2,7 @@ import datetime
 import numpy as np
 from PIL import Image
 from io import BytesIO
+import random
 
 from dataset_store import Dataset
 from tsmap3 import TSMap, GNSSTransformer
@@ -80,6 +81,7 @@ class BagReader(object):
             novatel_loc.pose.orientation.y,
             novatel_loc.pose.orientation.z,
         ])
+        gps_data[:2] += 2 * random.random() - 1
         
         data = {}
         data['gps_data'] = gps_data

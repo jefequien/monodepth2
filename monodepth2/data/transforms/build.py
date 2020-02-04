@@ -38,7 +38,7 @@ def build_transforms(cfg, is_train=True):
     else:
         width = cfg.INPUT.WIDTH
         height = cfg.INPUT.HEIGHT
-        aux_ids = []
+        aux_ids = ['map']
         scales = [0]
         flip_horizontal_prob = 0.0
         brightness = 0.0

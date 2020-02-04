@@ -46,11 +46,13 @@ class MonodepthModel(object):
 
         # Get camera transform
         cam_T = outputs[('cam_T_cam', 0, -1)]
+        drift_T = outputs[('map_cam_T_cam', 0, 0)]
 
         preds = {}
         preds['disp'] = disp.cpu().detach().numpy()
         preds['depth'] = depth.cpu().detach().numpy()
         preds['cam_T'] = cam_T.cpu().detach().numpy()
+        preds['drift_T'] = drift_T.cpu().detach().numpy()
         return preds
 
     def process_batch(self, inputs):
