@@ -15,6 +15,9 @@ class MonodepthModel(object):
         self.device = cfg.MODEL.DEVICE
         self.output_dir = cfg.OUTPUT_DIR
 
+        self.min_depth = cfg.SOLVER.MIN_DEPTH
+        self.max_depth = cfg.SOLVER.MAX_DEPTH
+
         self.models = build_models(cfg)
         self.transform = build_transforms(cfg, is_train=False)
     
@@ -35,10 +38,17 @@ class MonodepthModel(object):
         with torch.no_grad():
             _, outputs = self.process_batch(batch_inputs)
 
-        depth = outputs[('disp', 0)][:,0,:,:]
+        # Get depth
+        scale = 0
+        disp = outputs[("disp", scale)]
+        _, depth = disp_to_depth(disp, self.min_depth, self.max_depth)
+        depth = depth[:,0,:,:]
+
+        # Get camera transform
         cam_T = outputs[('cam_T_cam', 0, -1)]
 
         preds = {}
+        preds['disp'] = disp.cpu().detach().numpy()
         preds['depth'] = depth.cpu().detach().numpy()
         preds['cam_T'] = cam_T.cpu().detach().numpy()
         return preds
@@ -47,13 +57,13 @@ class MonodepthModel(object):
         inputs = {k:v.to(self.device) for k,v in inputs.items()}
         depth_features = self.models["depth_encoder"](inputs["color_aug", 0, 0])
         depth_outputs = self.models["depth_decoder"](depth_features)
-        landmark_outputs = self.models["landmark_decoder"](depth_features)
         pose_outputs = self.predict_poses(inputs)
+        map_pose_outputs = self.predict_map_poses(inputs)
 
         outputs = {}
         outputs.update(depth_outputs)
         outputs.update(pose_outputs)
-        outputs.update(landmark_outputs)
+        outputs.update(map_pose_outputs)
         return inputs, outputs
     
     def predict_poses(self, inputs):
@@ -79,6 +89,23 @@ class MonodepthModel(object):
             # Invert the matrix if the frame id is negative
             pose_outputs[("cam_T_cam", 0, f_i)] = transformation_from_parameters(
                 axisangle[:, 0], translation[:, 0], invert=(f_i < 0))
+
+        return pose_outputs
+
+    def predict_map_poses(self, inputs):
+        pose_outputs = {}
+
+        # Map view then map pred
+        x = [inputs["map_view", 0, 0], inputs["map_pred", 0, 0]]
+
+        pose_features = [self.models["map_pose_encoder"](torch.cat(x, 1))]
+        axisangle, translation = self.models["map_pose_decoder"](pose_features)
+        pose_outputs[("axisangle", 0, 0)] = axisangle
+        pose_outputs[("translation", 0, 0)] = translation
+
+        # Invert the matrix if the frame id is negative
+        pose_outputs[("map_cam_T_cam", 0, 0)] = transformation_from_parameters(
+            axisangle[:, 0], translation[:, 0], invert=True)
 
         return pose_outputs
 

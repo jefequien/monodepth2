@@ -2,6 +2,7 @@ import datetime
 import numpy as np
 from PIL import Image
 from io import BytesIO
+from scipy.sparse import coo_matrix
 
 from dataset_store import Dataset
 from tsmap3 import TSMap, GNSSTransformer
@@ -13,8 +14,7 @@ from ..maps.map_viewer import MapViewer, MapCamera
 class BagReader(object):
 
     def __init__(self, bag_info):
-        bag_name, map_name, begin, end = bag_info
-        version = None
+        bag_name, map_name, begin, end, version = bag_info
         self.bag_name = bag_name
         self.map_name = map_name
         self.bag_info = bag_info
@@ -95,7 +95,7 @@ class BagReader(object):
             self.ds.get_topic(topic)
             return True
         except KeyError as e:
-            # print('Topic not found: {}'.format(topic))
+            print('Topic not found: {}'.format(topic))
             return False
     
     def __len__(self):
@@ -122,6 +122,7 @@ class CameraBagReader(BagReader):
         self.cam_ids = [1,3]
         for cam_id in self.cam_ids:
             self.add_topic('cam{}'.format(cam_id), '/camera{}/image_color/compressed'.format(cam_id))
+            self.add_topic('map_pred{}'.format(cam_id), '/lane_detection/camera{}'.format(cam_id))
 
         
         # Map View
@@ -140,15 +141,37 @@ class CameraBagReader(BagReader):
             _, camera = raw_data[cam_name]
             img = Image.open(BytesIO(camera.data))
             data[cam_name] = img.resize((512, 288))
-        
-        data['map_view/cam1'] = self.create_map_view(data)
+
+            # Parse lanes            
+            _, r_map_data = raw_data['map_pred{}'.format(cam_id)]
+            rmap_list = translate_rmap_data(r_map_data)
+            r_map = rmap_list[0]
+
+            lane_dets = np.zeros((r_map.shape[0], r_map.shape[1], 3), dtype=np.uint8)
+            lane_dets[r_map == 1] = [0, 255, 0] # white marker
+            lane_dets[r_map == 2] = [0, 0, 255] # transparent
+            lane_dets[r_map == 5] = [255, 0, 0] # curb
+            lane_dets = Image.fromarray(lane_dets)
+            data['map_pred/cam{}'.format(cam_id)] = lane_dets.resize((512, 288))
+            data['map_view/cam{}'.format(cam_id)] = self.create_map_view(data, cam_id)
         return data
 
-    def create_map_view(self, data):
-        cam_name = 'cam1'
+    def create_map_view(self, data, cam_id):
+        cam_name = 'cam{}'.format(cam_id)
         gps_data = data['gps_data']
         self.map_cameras[cam_name].set_position(gps_data)
-        map_view = self.map_viewer.get_view(self.map_cameras[cam_name])
+        map_view, depth = self.map_viewer.get_view(self.map_cameras[cam_name])
         map_view = map_view.resize((512, 288))
         return map_view
 
+def translate_rmap_data(lane_det_msg):
+    rmap_list = []
+
+    rmap_pips = np.frombuffer(lane_det_msg.data, dtype=np.uint8)
+    num_pips = int(rmap_pips.shape[0] / lane_det_msg.height / lane_det_msg.width)
+    rmap_pips = rmap_pips.reshape((num_pips, lane_det_msg.height, lane_det_msg.width))
+    for i in range(num_pips):
+        rmap = rmap_pips[i, :, :]
+        rmap = rmap.copy()
+        rmap_list.append(rmap)
+    return rmap_list

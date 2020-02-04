@@ -17,6 +17,7 @@ class DatasetCatalog(object):
                 "feature=base&ver=2019121700&base_pt=(32.75707,-111.55757)&end_pt=(32.092537212,-110.7892506)",
                 "0:13:00",
                 "0:43:00",
+                None,
             )
         },
         "ts_val": {
@@ -25,6 +26,7 @@ class DatasetCatalog(object):
                 "feature=base&ver=2019121700&base_pt=(32.75707,-111.55757)&end_pt=(32.092537212,-110.7892506)",
                 "0:43:00",
                 "0:46:00",
+                None,
             )
         },
     }

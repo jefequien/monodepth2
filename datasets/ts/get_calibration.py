@@ -11,8 +11,9 @@ def main(args):
 
     all_calibs = {}
     for bag_info in bag_list:
-        print(bag_info)
-        bag_name, map_name, begin, end = bag_info
+        bag_name = bag_info[0]
+        print(bag_name)
+        
         cm = CalibrationManager(dataset=bag_name)
         
         calibs = cm.get_cameras()

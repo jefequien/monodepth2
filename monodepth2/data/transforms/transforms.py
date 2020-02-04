@@ -34,25 +34,21 @@ class PrepareAuxInputs(object):
                 inputs['gps_delta', 1] = (gps1 - gps0) * 0.1
                 inputs['gps_delta', -1] = (gps0 - gps_1) * 0.1
 
-            elif aux_id == 'map_view':
-                mv0 = data[0, aux_id]
-                mv1 = data[1, aux_id]
-                mv_1 = data[-1, aux_id]
-                mv0 = F.resize(mv0, (self.height, self.width), interpolation=Image.ANTIALIAS)
-                mv1 = F.resize(mv1, (self.height, self.width), interpolation=Image.ANTIALIAS)
-                mv_1 = F.resize(mv_1, (self.height, self.width), interpolation=Image.ANTIALIAS)
+            elif aux_id == 'map':
+                mv = data[0, 'map_view']
+                mp = data[0, 'map_pred']
+                mv = F.resize(mv, (self.height, self.width), interpolation=Image.ANTIALIAS)
+                mp = F.resize(mp, (self.height, self.width), interpolation=Image.ANTIALIAS)
 
                 for s in self.scales:
                     r = 2 ** s
                     if s == 0:
-                        inputs[aux_id, 0, s] = mv0
-                        inputs[aux_id, 1, s] = mv1
-                        inputs[aux_id, -1, s] = mv_1
+                        inputs['map_view', 0, s] = mv
+                        inputs['map_pred', 0, s] = mp
                     else:
                         size = (self.height // r, self.width // r)
-                        inputs[aux_id, 0, s] = F.resize(mv0, size, interpolation=Image.ANTIALIAS)
-                        inputs[aux_id, 1 , s] = F.resize(mv1, size, interpolation=Image.ANTIALIAS)
-                        inputs[aux_id, -1 , s] = F.resize(mv_1, size, interpolation=Image.ANTIALIAS)
+                        inputs['map_view', 0, s] = F.resize(mv, size, interpolation=Image.ANTIALIAS)
+                        inputs['map_pred', 0, s] = F.resize(mp, size, interpolation=Image.ANTIALIAS)
             else:
                 raise Exception('Auxilliary data id not recognized for transform: {}'.format(aux_id))
         return data, inputs

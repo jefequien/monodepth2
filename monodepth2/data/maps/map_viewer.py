@@ -12,28 +12,33 @@ class MapViewer:
         self.map_reader = MapReader(map_name)
 
     def get_view(self, camera):
+        """ Returns a RGB image and depth image of virtual camera view.
+        """
         w, h = camera.out_shape
-        view_img = np.zeros((h,w,3), dtype='uint8')
+        color_img = np.zeros((h,w,3), dtype='uint8')
+        depth_img = np.zeros((h,w), dtype=np.float32)
         cam2enu, enu2cam = camera.get_transforms()
 
         pos = cam2enu[:3, 3]
         solid_lines = self.map_reader.get_solid_lines(pos)
         for line in solid_lines:
-            line_pts = self.project_landmarks(line, camera)
-            view_img = draw_line(view_img, line_pts, color=(255,0,0))
+            img_pts, depths = self.project_landmarks(line, camera)
+            color_img = draw_line(color_img, img_pts, color=(0,255,0))
+            depth_img = draw_points(depth_img, img_pts, values=depths)
 
         dash_lines = self.map_reader.get_dash_lines(pos)
         for dash in dash_lines:
-            dash_pts = self.project_landmarks(dash, camera)
-            if len(dash_pts) == 4:
-                view_img = draw_poly(view_img, dash_pts, color=(0,255,0))
+            img_pts, depths = self.project_landmarks(dash, camera)
+            if len(img_pts) == 4:
+                color_img = draw_poly(color_img, img_pts, color=(0,255,0))
+                depth_img = draw_points(depth_img, img_pts, values=depths)
 
-        view_img = Image.fromarray(view_img, 'RGB')
-        return view_img
+        color_img = Image.fromarray(color_img, 'RGB')
+        return color_img, depth_img
     
     def project_landmarks(self, landmarks, camera):
         if len(landmarks) == 0:
-            return []
+            return [], []
 
         w, h = camera.out_shape
         cam2enu, enu2cam = camera.get_transforms()
@@ -42,17 +47,22 @@ class MapViewer:
         # Filter for landmarks in front of camera (Z > 0)
         landmarks = np.array([l for l in landmarks if l[2] > 0])
         if len(landmarks) == 0:
-            return []
+            return [], []
 
         # Project landmarks onto image plane
         intrinsic = scale_cam_intrinsic(camera.intrinsic, camera.img_shape, camera.out_shape)
         distortion = camera.distortion
         tcw = np.eye(4)
         img_pts, _ = cv.projectPoints(landmarks, tcw[:3, :3], tcw[:3, 3], intrinsic, distortion)
+        
         img_pts = img_pts[:, 0, :]
-        img_pts = np.array([p for p in img_pts if p[0] > 0 and p[0] < w and p[1] > 0 and p[1] < h])
-
-        return img_pts
+        depths = landmarks[:,2]
+        
+        filtered = [(p,d) for p,d in zip(img_pts, depths) if p[0] > 0 and p[0] < w and p[1] > 0 and p[1] < h]
+        if len(filtered) == 0:
+            return [],[]
+        else:
+            return zip(*filtered)
 
 def draw_poly(img, pts, color=(0,255,0)):
     if len(pts) == 0:
@@ -68,14 +78,14 @@ def draw_line(img, pts, color=(0,255,0)):
 
     pts = np.round(pts).astype(int)
     pts = pts.reshape((-1,1,2))
-    img = cv.polylines(img, [pts], False, color=color, thickness=5)
+    img = cv.polylines(img, [pts], False, color=color, thickness=3)
     return img
 
-def draw_points(img, points, color=(0, 255, 0)):
-    for pt in points:
+def draw_points(img, points, values):
+    for pt, v in zip(points, values):
         pt = np.round(pt)
         pt = (int(pt[0]), int(pt[1]))
-        cv.circle(img, pt, color=color, radius=4, thickness=-1)
+        cv.circle(img, pt, color=v, radius=10, thickness=-1)
     return img
 
 
@@ -88,6 +98,9 @@ class MapCamera:
         self.out_shape = calib['img_shape']
 
         self.T = np.eye(4)
+    
+    def set_out_shape(self, shape):
+        self.out_shape = shape
 
     def set_position(self, position):
         r, t = position[3:], position[:3]

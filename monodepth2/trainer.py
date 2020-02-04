@@ -138,21 +138,21 @@ class Trainer(object):
 
         # Create warped images
         self.generate_images_pred(inputs, outputs)
-        self.generate_map_view_pred(inputs, outputs)
+        self.generate_map_pred(inputs, outputs)
 
         total_loss = 0
         for scale in self.scales:
             img_loss = self.compute_image_loss(inputs, outputs, scale)
-            total_loss += img_loss
+            map_loss = self.compute_map_loss(inputs, outputs, scale)
+            total_loss += img_loss + map_loss
             losses["loss/{}".format(scale)] = img_loss
+            losses["loss/map{}".format(scale)] = map_loss
         total_loss /= len(self.scales)
 
         gps_loss = self.compute_gps_loss(inputs, outputs)
         losses["loss/gps"] = gps_loss
-        landmark_loss = self.compute_landmark_loss(inputs, outputs)
-        losses["loss/landmark"] = landmark_loss
 
-        losses["loss"] = total_loss + gps_loss + landmark_loss
+        losses["loss"] = total_loss + gps_loss
         return losses
 
     def generate_images_pred(self, inputs, outputs):
@@ -192,7 +192,7 @@ class Trainer(object):
                     inputs[("color", frame_id, source_scale)]
     
 
-    def generate_map_view_pred(self, inputs, outputs):
+    def generate_map_pred(self, inputs, outputs):
         """Generate the warped (reprojected) color images for a minibatch.
         Generated images are saved into the `outputs` dictionary.
         """
@@ -206,27 +206,23 @@ class Trainer(object):
 
             outputs[("depth", 0, scale)] = depth
 
-            for i, frame_id in enumerate(self.frame_ids[1:]):
+            frame_id = 0
+            T = outputs[("map_cam_T_cam", 0, frame_id)]
 
-                if frame_id == "s":
-                    T = inputs["stereo_T"]
-                else:
-                    T = outputs[("cam_T_cam", 0, frame_id)]
+            cam_points = self.backproject_depth[source_scale](
+                depth, inputs[("inv_K", frame_id, source_scale)])
+            pix_coords = self.project_3d[source_scale](
+                cam_points, inputs[("K", frame_id, source_scale)], T)
 
-                cam_points = self.backproject_depth[source_scale](
-                    depth, inputs[("inv_K", frame_id, source_scale)])
-                pix_coords = self.project_3d[source_scale](
-                    cam_points, inputs[("K", frame_id, source_scale)], T)
+            outputs[("sample", frame_id, scale)] = pix_coords
 
-                outputs[("sample", frame_id, scale)] = pix_coords
+            outputs[("map_view", frame_id, scale)] = F.grid_sample(
+                inputs[("map_view", frame_id, source_scale)],
+                outputs[("sample", frame_id, scale)],
+                padding_mode="border")
 
-                outputs[("map_view", frame_id, scale)] = F.grid_sample(
-                    inputs[("map_view", frame_id, source_scale)],
-                    outputs[("sample", frame_id, scale)],
-                    padding_mode="border")
-
-                outputs[("map_view_identity", frame_id, scale)] = \
-                    inputs[("map_view", frame_id, source_scale)]
+            outputs[("map_view_identity", frame_id, scale)] = \
+                inputs[("map_view", frame_id, source_scale)]
 
     def compute_image_loss(self, inputs, outputs, scale):
         loss = 0
@@ -274,18 +270,50 @@ class Trainer(object):
         loss += self.disparity_smoothness * smooth_loss / (2 ** scale)
         return loss
 
-    def compute_landmark_loss(self, inputs, outputs):
+    def compute_map_loss(self, inputs, outputs, scale):
+        loss = 0
         reprojection_losses = []
 
         source_scale = 0
-        landmark = outputs[("landmark", source_scale)]
+        disp = outputs[("disp", scale)]
+        color = inputs[("map_pred", 0, scale)]
+        target = inputs[("map_pred", 0, source_scale)]
 
-        for frame_id in self.frame_ids[1:]:
-            remapped = outputs[("map_view", frame_id, source_scale)]
-            reprojection_losses.append(self.compute_reprojection_loss(landmark, remapped))
+        for frame_id in [0]:
+            pred = outputs[("map_view", frame_id, scale)]
+            reprojection_losses.append(self.compute_reprojection_loss(pred, target))
 
         reprojection_loss = torch.cat(reprojection_losses, 1)
-        loss = reprojection_loss.mean()
+
+        identity_reprojection_losses = []
+        for frame_id in [0]:
+            pred = inputs[("map_view", frame_id, source_scale)]
+            identity_reprojection_losses.append(
+                self.compute_reprojection_loss(pred, target))
+
+        identity_reprojection_loss = torch.cat(identity_reprojection_losses, 1)
+
+        # add random numbers to break ties
+        identity_reprojection_loss += torch.randn(
+            identity_reprojection_loss.shape).cuda() * 0.00001
+
+        combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
+
+        if combined.shape[1] == 1:
+            to_optimise = combined
+        else:
+            to_optimise, idxs = torch.min(combined, dim=1)
+
+        outputs["map_identity_selection/{}".format(scale)] = (
+            idxs > identity_reprojection_loss.shape[1] - 1).float()
+
+        loss += to_optimise.mean()
+
+        mean_disp = disp.mean(2, True).mean(3, True)
+        norm_disp = disp / (mean_disp + 1e-7)
+        smooth_loss = get_smooth_loss(norm_disp, color)
+
+        loss += self.disparity_smoothness * smooth_loss / (2 ** scale)
         return loss
 
     def compute_gps_loss(self, inputs, outputs):
@@ -328,11 +356,6 @@ class Trainer(object):
 
         num_images = min(4, self.batch_size) # write a maxmimum of four images
         for j in range(num_images): 
-            writer.add_image(
-                "landmark/{}".format(j),
-                normalize_image(outputs[("landmark", 0)][j]), 
-                self.step
-            )
 
             for s in self.scales:
                 for frame_id in self.frame_ids:
@@ -341,20 +364,10 @@ class Trainer(object):
                         inputs[("color", frame_id, s)][j].data,
                         self.step
                     )
-                    writer.add_image(
-                        "map_view_{}_{}/{}".format(frame_id, s, j),
-                        inputs[("map_view", frame_id, s)][j].data,
-                        self.step
-                    )
                     if s == 0 and frame_id != 0:
                         writer.add_image(
                             "color_pred_{}_{}/{}".format(frame_id, s, j),
                             outputs[("color", frame_id, s)][j].data, 
-                            self.step
-                        )
-                        writer.add_image(
-                            "map_view_pred_{}_{}/{}".format(frame_id, s, j),
-                            outputs[("map_view", frame_id, s)][j].data, 
                             self.step
                         )
 
@@ -369,6 +382,24 @@ class Trainer(object):
                     outputs["identity_selection/{}".format(s)][j][None, ...], 
                     self.step
                 )
+
+                writer.add_image(
+                    "map_view_{}/{}".format(s, j),
+                    inputs[("map_view", 0, s)][j].data,
+                    self.step
+                )
+
+                writer.add_image(
+                    "map_pred_{}/{}".format(s, j),
+                    inputs[("map_pred", 0, s)][j].data,
+                    self.step
+                )
+                if s == 0:
+                    writer.add_image(
+                        "map_warp_{}/{}".format(s, j),
+                        outputs[("map_view", 0, s)][j].data,
+                        self.step
+                    )
     
     def checkpoint(self):
         """Save model weights to disk

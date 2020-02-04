@@ -13,7 +13,7 @@ class TSDataset(SyncedDataset):
 
     def __init__(self, bag_info, data_ids, transform=None):
         super(TSDataset, self).__init__(data_ids=data_ids, transform=transform)
-        bag_name, map_name, begin, end = bag_info
+        bag_name = bag_info[0]
 
         self.bag_reader = CameraBagReader(bag_info)
         self.load_dir = load_bag_to_disk(self.bag_reader)
@@ -63,10 +63,16 @@ class TSDataset(SyncedDataset):
         bag_idx = idx + 1 + shift
         fname = os.path.join(self.load_dir, '{}/map_view/{}.jpg'.format(bag_idx, cam_name))
         return Image.open(fname)
+    
+    def get_map_pred(self, idx, shift=0):
+        cam_name = 'cam1'
+        bag_idx = idx + 1 + shift
+        fname = os.path.join(self.load_dir, '{}/map_pred/{}.jpg'.format(bag_idx, cam_name))
+        return Image.open(fname)
 
 
 def load_bag_to_disk(bag_reader, reload=False):
-    load_dir = "/tmp/tsdataset/{}".format(str(bag_reader.bag_info))
+    load_dir = "/home/jeffrey.hu/tmp/tsdataset/{}".format(str(bag_reader.bag_info))
     if os.path.isdir(load_dir) and not reload:
         return load_dir
 
