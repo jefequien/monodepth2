@@ -3,69 +3,82 @@ import time
 
 from tsmap3 import TSMap, Point3d, LaneSequence, Lane, Roadmarker
 
-SOLID_LINE_TYPES = {Roadmarker.Type.WHITE_SOLID_LINE, Roadmarker.Type.WHITE_DASHED_LINE,
-                    Roadmarker.Type.YELLOW_SOLID_LINE, Roadmarker.Type.YELLOW_DASHED_LINE}
+SOLID_LINE_TYPES = {Roadmarker.Type.WHITE_SOLID_LINE, Roadmarker.Type.YELLOW_SOLID_LINE}
 DASH_BLOB_TYPES = {Roadmarker.Type.WHITE_DASHED_LINE_BLOB, Roadmarker.Type.YELLOW_DASHED_LINE_BLOB}
+CURB_TYPES = {Roadmarker.Type.CURB}
+SURFACE_MARKING_TYPES = {Roadmarker.Type.ARROW, Roadmarker.Type.CHARACTER}
 
 class MapReader:
 
     def __init__(self, map_name):
         self.tsmap = TSMap(map_name)
-        self.front_limit = 50
+        self.radius = 100
         self.no_oncoming = True
+
+        self.line_thickness = 0.1
     
-    def get_solid_lines(self, enu_coords):
+    def get_road_markers(self, enu_coords):
         base = Point3d(*enu_coords[:3])
         self.tsmap.update_car_pos(*enu_coords[:2], async=False)
+        roadmarkers = self.tsmap.get_visible_lines_by_range(base, self.radius, self.no_oncoming)
+        return roadmarkers
 
-        roadmarkers = self.tsmap.get_visible_lines_by_range(base, self.front_limit, self.no_oncoming)
+    def parse_solid_lines(self, roadmarkers):
+        roadmarkers = [m for m in roadmarkers if m.type in SOLID_LINE_TYPES]
+        lines = [np.array(m.pts[0]) for m in roadmarkers]
 
+        blobs = [line2blob(line, self.line_thickness) for line in lines]
+        return blobs
+
+    def parse_curb(self, roadmarkers):
+        roadmarkers = [m for m in roadmarkers if m.type in CURB_TYPES]
+        lines = [np.array(m.pts[0]) for m in roadmarkers]
+
+        blobs = [line2blob(line, self.line_thickness) for line in lines]
+        return blobs
+
+    def parse_dash_lines(self, roadmarkers):
+        roadmarkers = [m for m in roadmarkers if m.type in DASH_BLOB_TYPES]
         lines = []
-        for marker in roadmarkers:
-            if marker.type in SOLID_LINE_TYPES:
-                line = [list(p) for p in marker.pts[0]]
-                line = np.array(line)
-                lines.append(line)
-        return lines
-    
-    def get_dash_lines(self, enu_coords):
-        base = Point3d(*enu_coords[:3])
-        self.tsmap.update_car_pos(*enu_coords[:2], async=False)
-
-        roadmarkers = self.tsmap.get_visible_lines_by_range(base, self.front_limit, self.no_oncoming)
-
-        dashes = []
-        for marker in roadmarkers:
-            if marker.type in DASH_BLOB_TYPES:
-                for pts in marker.pts:
-                    dash = [list(p) for p in pts]
-                    dash[0], dash[1] = dash[1], dash[0] # Flip to be convex
-                    dash = np.array(dash)
-                    dashes.append(dash)
-        return dashes
-
-
-    # def get_landmarks(self, enu_coords):
-    #     """ Returns a Nx3 array of ENU coordinates.
-    #     """
-    #     landmarks = []
-
-    #     base = Point3d(*enu_coords[:3])
-    #     self.tsmap.update_car_pos(*enu_coords[:2], async=False)
-
-    #     roadmarkers = self.tsmap.get_visible_lines_by_range(base, self.front_limit, self.no_oncoming)
-
-    #     for marker in roadmarkers:
-    #         if marker.type in SOLID_LINE_TYPES:
-    #             for p in marker.pts[0]:
-    #                 landmarks.append(list(p))
-    #         elif marker.type in DASH_BLOB_TYPES:
-    #             for dash in marker.pts:
-    #                 for p in dash:
-    #                     landmarks.append(list(p))
-    #         else:
-    #             continue
-
-    #     landmarks = np.array(landmarks)
-    #     return landmarks
+        for m in roadmarkers:
+            line = []
+            for blob in m.pts:
+                blob_pts = np.array(blob)
+                pt = np.mean(blob_pts, axis=0)
+                line.append(pt)
+            line = np.array(line)
+            lines.append(line)
         
+        blobs = [line2blob(line, self.line_thickness) for line in lines]
+        return blobs
+
+    def parse_dash_blobs(self, roadmarkers):
+        roadmarkers = [m for m in roadmarkers if m.type in DASH_BLOB_TYPES]
+
+        blobs = []
+        for m in roadmarkers:
+            for blob in m.pts:
+                blob_pts = np.array(blob)
+                 # Flip to be convex
+                x = blob_pts[0].copy()
+                blob_pts[0] = blob_pts[1]
+                blob_pts[1] = x
+                blobs.append(blob_pts)
+        return blobs
+    
+    def parse_surface_markings(self, roadmarkers):
+        roadmarkers = [m for m in roadmarkers if m.type in SURFACE_MARKING_TYPES]
+        blobs = [np.array(m.pts[0]) for m in roadmarkers]
+        return blobs
+
+def line2blob(line, thickness):
+    l0 = []
+    l1 = []
+    for p0, p1 in zip(line[:-1], line[1:]):
+        v = p1 - p0
+        v /= np.linalg.norm(v)
+        v = np.array([-v[1], v[0], v[2]])
+        l0.append(p0 + v * thickness)
+        l1.append(p0 - v * thickness)
+    blob = np.array(l0 + l1[::-1])
+    return blob

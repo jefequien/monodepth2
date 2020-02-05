@@ -29,17 +29,17 @@ def setup(args):
 
 def main(args):
     cfg = setup(args)
-    # bag_name = '2019-12-17-13-24-03'
-    # map_name = 'feature=base&ver=2019121700&base_pt=(32.75707,-111.55757)&end_pt=(32.092537212,-110.7892506)'
-    # begin = '0:43:00'
-    # end = '0:45:00'
-    # version = None
+    bag_name = '2019-12-17-13-24-03'
+    map_name = 'feature=base&ver=2019121700&base_pt=(32.75707,-111.55757)&end_pt=(32.092537212,-110.7892506)'
+    begin = '0:43:00'
+    end = '0:45:00'
+    version = None
 
-    bag_name = '2020-01-13-09-35-05'
-    map_name = 'feature=firebird&ver=2020011600&base_pt=(32.75707,-111.55757)&end_pt=(32.092537,-110.7892506)'
+    # bag_name = '2020-01-13-09-35-05'
+    # map_name = 'feature=firebird&ver=2020011600&base_pt=(32.75707,-111.55757)&end_pt=(32.092537,-110.7892506)'
     # begin, end = '02:10:20', '02:14:50'
-    begin, end = '02:12:00', '02:14:50'
-    version = 'R20200120234009'
+    # # begin, end = '02:12:00', '02:14:50'
+    # version = 'R20200120234009'
     bag_info = bag_name, map_name, begin, end, version
 
     bag_reader = CameraBagReader(bag_info)

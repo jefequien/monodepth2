@@ -81,7 +81,8 @@ class BagReader(object):
             novatel_loc.pose.orientation.y,
             novatel_loc.pose.orientation.z,
         ])
-        # gps_data[:2] += 2 * random.random() - 1
+        gps_data[:3] += 4 * (random.random()-0.5)
+        gps_data[3:] += 0.1 * (random.random()-0.5)
         
         data = {}
         data['gps_data'] = gps_data
@@ -161,7 +162,7 @@ class CameraBagReader(BagReader):
         cam_name = 'cam{}'.format(cam_id)
         gps_data = data['gps_data']
         self.map_cameras[cam_name].set_position(gps_data)
-        map_view, depth = self.map_viewer.get_view(self.map_cameras[cam_name])
+        map_view = self.map_viewer.get_view(self.map_cameras[cam_name])
         map_view = map_view.resize((512, 288))
         return map_view
 

@@ -16,25 +16,40 @@ class MapViewer:
         """
         w, h = camera.out_shape
         color_img = np.zeros((h,w,3), dtype='uint8')
-        depth_img = np.zeros((h,w), dtype=np.float32)
         cam2enu, enu2cam = camera.get_transforms()
 
         pos = cam2enu[:3, 3]
-        solid_lines = self.map_reader.get_solid_lines(pos)
-        for line in solid_lines:
-            img_pts, depths = self.project_landmarks(line, camera)
-            color_img = draw_line(color_img, img_pts, color=(0,255,0))
-            depth_img = draw_points(depth_img, img_pts, values=depths)
+        roadmarkers = self.map_reader.get_road_markers(pos)
 
-        dash_lines = self.map_reader.get_dash_lines(pos)
-        for dash in dash_lines:
-            img_pts, depths = self.project_landmarks(dash, camera)
-            if len(img_pts) == 4:
+        # Draw solid lines
+        for line in self.map_reader.parse_solid_lines(roadmarkers):
+            img_pts, depths = self.project_landmarks(line, camera)
+            color_img = draw_poly(color_img, img_pts, color=(0,255,0))
+
+        # Draw curb
+        for line in self.map_reader.parse_curb(roadmarkers):
+            img_pts, depths = self.project_landmarks(line, camera)
+            color_img = draw_poly(color_img, img_pts, color=(255,0,0))
+
+        # Draw dashed lines
+        for line in self.map_reader.parse_dash_lines(roadmarkers):
+            img_pts, depths = self.project_landmarks(line, camera)
+            color_img = draw_poly(color_img, img_pts, color=(0,0,255))
+
+        # Draw dash blobs
+        for blob in self.map_reader.parse_dash_blobs(roadmarkers):
+            img_pts, depths = self.project_landmarks(blob, camera)
+            if len(img_pts) == len(blob):
                 color_img = draw_poly(color_img, img_pts, color=(0,255,0))
-                depth_img = draw_points(depth_img, img_pts, values=depths)
+
+        # Draw surface markings
+        for blob in self.map_reader.parse_surface_markings(roadmarkers):
+            img_pts, depths = self.project_landmarks(blob, camera)
+            if len(img_pts) == len(blob):
+                color_img = draw_poly(color_img, img_pts, color=(255,255,0))
 
         color_img = Image.fromarray(color_img, 'RGB')
-        return color_img, depth_img
+        return color_img
     
     def project_landmarks(self, landmarks, camera):
         if len(landmarks) == 0:
@@ -72,13 +87,20 @@ def draw_poly(img, pts, color=(0,255,0)):
     img = cv.fillConvexPoly(img, pts, color=color)
     return img
 
-def draw_line(img, pts, color=(0,255,0)):
-    if len(pts) == 0:
-        return img
+# def draw_line(img, pts, color=(0,255,0)):
+#     if len(pts) == 0:
+#         return img
 
-    pts = np.round(pts).astype(int)
-    pts = pts.reshape((-1,1,2))
-    img = cv.polylines(img, [pts], False, color=color, thickness=2)
+#     pts = np.round(pts).astype(int)
+#     pts = pts.reshape((-1,1,2))
+#     img = cv.polylines(img, [pts], False, color=color, thickness=2)
+#     return img
+
+def draw_line(img, pts, depths, color=(0,255,0)):
+    for p0, p1, d0, d1 in zip(pts[:-1], pts[1:], depths[:-1], depths[1:]):
+        p0 = tuple(p0.astype(int))
+        p1 = tuple(p1.astype(int))
+        cv.line(img, p0, p1, color=color, thickness=2)
     return img
 
 def draw_points(img, points, values):

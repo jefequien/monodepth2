@@ -53,7 +53,7 @@ class LocalizationModel:
         for cam_name in self.cam_names:
             self.map_cameras[cam_name].set_position(self.position)
             self.map_cameras[cam_name].set_out_shape(observation['cam1'].size)
-            self.map_view, _ = self.map_viewer.get_view(self.map_cameras[cam_name])
+            self.map_view = self.map_viewer.get_view(self.map_cameras[cam_name])
 
         self.last_observation = observation
         self.initialized = True
@@ -66,7 +66,7 @@ class LocalizationModel:
         all_preds = self.model.predict(all_data)
 
         # Update from predictions
-        for cam_name, data, cam_T, drift_T, depth in zip(self.cam_names, all_data, all_preds['cam_T'], all_preds['drift_T'], all_preds['depth']):
+        for cam_name, cam_T, drift_T, depth in zip(self.cam_names, all_preds['cam_T'], all_preds['drift_T'], all_preds['depth']):
             img = self.last_observation['cam1']
             map_pred = self.last_observation['map_pred/{}'.format(cam_name)]
 
@@ -76,18 +76,17 @@ class LocalizationModel:
             depth *= 10
 
             # Correct last step drift
-            self.map_cameras[cam_name].apply_T(drift_T)
-            aligned_view, _ = self.map_viewer.get_view(self.map_cameras[cam_name])
+            # self.map_cameras[cam_name].apply_T(drift_T)
+            aligned_view = self.map_viewer.get_view(self.map_cameras[cam_name])
 
             # self.map_cameras[cam_name].apply_T(cam_T)
             if self.num_steps % 1 == 0:
                 self.map_cameras[cam_name].set_position(observation['gps_data'])
 
-            self.map_view, _ = self.map_viewer.get_view(self.map_cameras[cam_name])
+            self.map_view = self.map_viewer.get_view(self.map_cameras[cam_name])
 
             # Visualize
             depth_img = vis_depth(depth)
-            # map_depth_img = vis_depth(map_depth, vmax=0.1)
 
             map_vis = img.copy()
             map_vis.paste(aligned_view, (0,0), aligned_view.convert('L'))
