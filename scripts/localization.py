@@ -81,19 +81,23 @@ class LocalizationModel:
             map_pred = observation['map_pred/{}'.format(cam_name)]
 
             self.map_cameras[cam_name].apply_T(cam_T)
-            if self.num_steps % 1 == 0:
-                self.map_cameras[cam_name].set_position(observation['gps_data'])
+            # if self.num_steps % 1 == 0:
+            #     self.map_cameras[cam_name].set_position(observation['gps_data'])
 
             unaligned_view = self.map_viewer.get_view(self.map_cameras[cam_name])
 
             # Visualize
             depth_img = vis_depth(depth)
+            depth_vis = Image.new('RGB', (512*2, 288))
+            depth_vis.paste(img, (0,0))
+            depth_vis.paste(depth_img, (512,0))
+            self.vis_images['{} depth'.format(cam_name)] = depth_vis
+
             pred_vis = img.copy()
             pred_vis.paste(map_pred, (0,0), map_pred.convert('L'))
             unaligned_vis = img.copy()
             unaligned_vis.paste(unaligned_view, (0,0), unaligned_view.convert('L'))
             self.vis_images['{} color'.format(cam_name)] = img
-            self.vis_images['{} depth'.format(cam_name)] = depth_img
             self.vis_images['{} map_pred'.format(cam_name)] = pred_vis
             self.vis_images['{} unaligned'.format(cam_name)] = unaligned_vis
 
@@ -127,11 +131,11 @@ class LocalizationModel:
             self.vis_images['{} aligned'.format(cam_name)] = aligned_vis
         
 
-        new_im = Image.new('RGB', (512*3, 288))
-        new_im.paste(unaligned_vis, (0,0))
-        new_im.paste(aligned_vis, (512,0))
-        new_im.paste(pred_vis, (512*2,0))
-        self.vis_images['{} merge'.format(cam_name)] = new_im
+        # new_im = Image.new('RGB', (512*3, 288))
+        # new_im.paste(unaligned_vis, (0,0))
+        # new_im.paste(aligned_vis, (512,0))
+        # new_im.paste(pred_vis, (512*2,0))
+        # self.vis_images['{} merge'.format(cam_name)] = new_im
         
         self.show()
         self.record_video()

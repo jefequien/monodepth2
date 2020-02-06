@@ -42,7 +42,7 @@ def main(args):
     # version = 'R20200120234009'
     bag_info = bag_name, map_name, begin, end, version
 
-    gps_noise = (0.1, 0.01)
+    gps_noise = cfg.INPUT.GPS_NOISE
     bag_reader = CameraBagReader(bag_info, gps_noise)
 
     localization_model = LocalizationModel(cfg)
