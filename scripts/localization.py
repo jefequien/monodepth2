@@ -81,8 +81,8 @@ class LocalizationModel:
             map_pred = observation['map_pred/{}'.format(cam_name)]
 
             self.map_cameras[cam_name].apply_T(cam_T)
-            # if self.num_steps % 1 == 0:
-            #     self.map_cameras[cam_name].set_position(observation['gps_data'])
+            if self.num_steps % 1 == 0:
+                self.map_cameras[cam_name].set_position(observation['gps_data'])
 
             unaligned_view = self.map_viewer.get_view(self.map_cameras[cam_name])
 
