@@ -7,7 +7,7 @@ DATASETS:
   TRAIN: ("ts_train",)
   TEST: ("ts_val",)
 SOLVER:
-  IMS_PER_BATCH: 4
-  VAL_FREQ: 100
+  IMS_PER_BATCH: 12
+  VAL_FREQ: 500
 
 OUTPUT_DIR: "./output/ts"

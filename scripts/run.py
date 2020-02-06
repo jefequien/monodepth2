@@ -42,14 +42,16 @@ def main(args):
     # version = 'R20200120234009'
     bag_info = bag_name, map_name, begin, end, version
 
-    bag_reader = CameraBagReader(bag_info)
+    gps_noise = (0.1, 0.01)
+    bag_reader = CameraBagReader(bag_info, gps_noise)
 
     localization_model = LocalizationModel(cfg)
     localization_model.setup(bag_info)
 
     for _, data in enumerate(bag_reader):
-        pred = localization_model.step(data)
+        localization_model.step(data)
 
+    localization_model.close()
 
 
 if __name__ == "__main__":

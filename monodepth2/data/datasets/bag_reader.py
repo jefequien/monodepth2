@@ -13,7 +13,7 @@ from ..maps.map_viewer import MapViewer, MapCamera
 
 class BagReader(object):
 
-    def __init__(self, bag_info):
+    def __init__(self, bag_info, gps_noise=None):
         bag_name, map_name, begin, end, version = bag_info
         self.bag_name = bag_name
         self.map_name = map_name
@@ -39,6 +39,7 @@ class BagReader(object):
                 }
             }
         }
+        self.gps_noise = (0,0) if gps_noise is None else gps_noise
         self.novatel_service = OfflineNovAtelService(novatel_srv_cfg)
 
         # Parse time at the end
@@ -81,8 +82,8 @@ class BagReader(object):
             novatel_loc.pose.orientation.y,
             novatel_loc.pose.orientation.z,
         ])
-        gps_data[:3] += 4 * (random.random()-0.5)
-        gps_data[3:] += 0.1 * (random.random()-0.5)
+        gps_data[:3] += self.gps_noise[0] * 2 * (random.random()-0.5)
+        gps_data[3:] += self.gps_noise[1] * 2 * (random.random()-0.5)
         
         data = {}
         data['gps_data'] = gps_data
@@ -119,8 +120,8 @@ class BagReader(object):
 
 class CameraBagReader(BagReader):
 
-    def __init__(self, bag_info):
-        super(CameraBagReader, self).__init__(bag_info)
+    def __init__(self, bag_info, gps_noise=None):
+        super(CameraBagReader, self).__init__(bag_info, gps_noise)
         self.cam_ids = [1,3]
         for cam_id in self.cam_ids:
             self.add_topic('cam{}'.format(cam_id), '/camera{}/image_color/compressed'.format(cam_id))

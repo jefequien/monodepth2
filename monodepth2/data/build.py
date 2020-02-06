@@ -5,7 +5,7 @@ from . import datasets as D
 from .transforms import build_transforms
 from .catalog import DatasetCatalog
 
-def build_dataset(dataset_names, data_ids, transform):
+def build_dataset(dataset_names, data_ids, transform, gps_noise):
     """
     Arguments:
         dataset_list (list[str]): Contains the names of the datasets, i.e.,
@@ -24,6 +24,7 @@ def build_dataset(dataset_names, data_ids, transform):
         args = dic["args"]
         args['data_ids'] = data_ids
         args['transform'] = transform
+        args['gps_noise'] = gps_noise
         dataset = factory(**args)
         datasets.append(dataset)
 
@@ -33,19 +34,18 @@ def build_dataset(dataset_names, data_ids, transform):
 def make_data_loader(cfg, is_train):
     if is_train:
         dataset_names = cfg.DATASETS.TRAIN
-        shuffle = True
         num_workers = cfg.DATALOADER.NUM_WORKERS
-        is_train_transform = True
+        shuffle = True
     else:
         dataset_names = cfg.DATASETS.TEST
-        shuffle = True
         num_workers = 0
-        is_train_transform = True
+        shuffle = True
     data_ids = cfg.INPUT.FRAME_IDS + cfg.INPUT.CAM_IDS + cfg.INPUT.AUX_IDS
     images_per_batch = cfg.SOLVER.IMS_PER_BATCH
+    gps_noise = cfg.INPUT.GPS_NOISE
 
-    transform = build_transforms(cfg, is_train=is_train_transform)
-    dataset = build_dataset(dataset_names, data_ids, transform)
+    transform = build_transforms(cfg, is_train=True)
+    dataset = build_dataset(dataset_names, data_ids, transform, gps_noise)
     data_loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=images_per_batch,

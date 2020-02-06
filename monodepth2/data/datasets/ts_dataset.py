@@ -11,12 +11,12 @@ from monodepth2.utils.calibration_manager import CalibrationManager
 
 class TSDataset(SyncedDataset):
 
-    def __init__(self, bag_info, data_ids, transform=None):
+    def __init__(self, bag_info, data_ids, transform=None, gps_noise=None):
         super(TSDataset, self).__init__(data_ids=data_ids, transform=transform)
         bag_name = bag_info[0]
 
-        self.bag_reader = CameraBagReader(bag_info)
-        self.load_dir = load_bag_to_disk(self.bag_reader)
+        self.bag_reader = CameraBagReader(bag_info, gps_noise)
+        self.load_dir = load_bag_to_disk(self.bag_reader, '{} {}'.format(str(bag_info), gps_noise))
 
         self.calib_manager = CalibrationManager(dataset=bag_name)
         self.camera_calibs = self.calib_manager.get_cameras()
@@ -71,8 +71,8 @@ class TSDataset(SyncedDataset):
         return Image.open(fname)
 
 
-def load_bag_to_disk(bag_reader, reload=False):
-    load_dir = "/home/jeffrey.hu/tmp/tsdataset/{}".format(str(bag_reader.bag_info))
+def load_bag_to_disk(bag_reader, name, reload=False):
+    load_dir = "/home/jeffrey.hu/tmp/tsdataset/{}".format(name)
     if os.path.isdir(load_dir) and not reload:
         return load_dir
 

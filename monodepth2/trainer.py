@@ -84,10 +84,10 @@ class Trainer(object):
             self.project_3d[scale].to(self.device)
     
     def train(self):
-        # for p in self.model.parameters_to_train():
-        #     p.requires_grad = False
-        # for p in self.model.parameters(['map_pose_encoder', 'map_pose_decoder']):
-        #     p.requires_grad = True
+        for p in self.model.parameters_to_train():
+            p.requires_grad = False
+        for p in self.model.parameters(['map_pose_encoder', 'map_pose_decoder']):
+            p.requires_grad = True
 
         while self.epoch < self.num_epochs:
             logger.info("Epoch {}/{}  LR {}".format(self.epoch + 1, self.num_epochs, self.get_lr()))

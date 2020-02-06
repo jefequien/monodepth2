@@ -26,11 +26,6 @@ class MapViewer:
             img_pts, depths = self.project_landmarks(line, camera)
             color_img = draw_poly(color_img, img_pts, color=(0,255,0))
 
-        # Draw curb
-        for line in self.map_reader.parse_curb(roadmarkers):
-            img_pts, depths = self.project_landmarks(line, camera)
-            color_img = draw_poly(color_img, img_pts, color=(255,0,0))
-
         # Draw dashed lines
         for line in self.map_reader.parse_dash_lines(roadmarkers):
             img_pts, depths = self.project_landmarks(line, camera)
@@ -41,6 +36,11 @@ class MapViewer:
             img_pts, depths = self.project_landmarks(blob, camera)
             if len(img_pts) == len(blob):
                 color_img = draw_poly(color_img, img_pts, color=(0,255,0))
+
+        # Draw curb
+        for line in self.map_reader.parse_curb(roadmarkers):
+            img_pts, depths = self.project_landmarks(line, camera)
+            color_img = draw_poly(color_img, img_pts, color=(255,0,0))
 
         # Draw surface markings
         for blob in self.map_reader.parse_surface_markings(roadmarkers):
