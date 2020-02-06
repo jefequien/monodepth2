@@ -81,7 +81,7 @@ class LocalizationModel:
             map_pred = observation['map_pred/{}'.format(cam_name)]
 
             self.map_cameras[cam_name].apply_T(cam_T)
-            if self.num_steps % 10 == 0:
+            if self.num_steps % 1 == 0:
                 self.map_cameras[cam_name].set_position(observation['gps_data'])
 
             unaligned_view = self.map_viewer.get_view(self.map_cameras[cam_name])
@@ -97,15 +97,7 @@ class LocalizationModel:
             self.vis_images['{} map_pred'.format(cam_name)] = pred_vis
             self.vis_images['{} unaligned'.format(cam_name)] = unaligned_vis
 
-            # aligned_vis = img.copy()
-            # aligned_vis.paste(aligned_view, (0,0), aligned_view.convert('L'))
-
-            # new_im = Image.new('RGB', (512*3, 288))
-            # new_im.paste(unaligned_vis, (0,0))
-            # new_im.paste(aligned_vis, (512,0))
-            # new_im.paste(pred_vis, (512*2,0))
             # self.vis_images['{} aligned'.format(cam_name)] = aligned_vis
-            # self.vis_images['{} merge'.format(cam_name)] = new_im
             # self.vis_images['{} map_depth_img'.format(cam_name)] = map_depth_img
 
         # Drift
@@ -133,6 +125,13 @@ class LocalizationModel:
             aligned_vis = img.copy()
             aligned_vis.paste(aligned_view, (0,0), aligned_view.convert('L'))
             self.vis_images['{} aligned'.format(cam_name)] = aligned_vis
+        
+
+        new_im = Image.new('RGB', (512*3, 288))
+        new_im.paste(unaligned_vis, (0,0))
+        new_im.paste(aligned_vis, (512,0))
+        new_im.paste(pred_vis, (512*2,0))
+        self.vis_images['{} merge'.format(cam_name)] = new_im
         
         self.show()
         self.record_video()
